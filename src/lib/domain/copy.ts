@@ -109,3 +109,12 @@ export function startingPointText(mode: Mode | null): string {
   if (!mode) return "Entraste al desafío sin pasar por el cuestionario inicial.";
   return `Entraste poniendo ${MODE_LABELS[mode]} en primer plano.`;
 }
+
+/**
+ * Lugar para "Volvé al …" (PRD §13: "Volvé al stand de Espacio IDI…"). Con el lugar por
+ * defecto usa el literal del PRD; si el evento define otro, lo respeta.
+ */
+export function standPhrase(locationLabel: string): string {
+  const label = locationLabel.trim();
+  return label === "" || label.toLowerCase() === "stand espacio idi" ? "stand de Espacio IDI" : label;
+}

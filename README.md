@@ -115,18 +115,24 @@ En el evento, pestaña **Configuración** (solo ADMIN): cada desafío lleva star
 | 14:25–14:30 | Pestaña **Equipos** → **Generar equipos** (solo presentes) → revisar, mover personas, cambiar mesas → **Publicar equipos**. Cada participante ve startup, equipo y mesa en su celular. |
 | 14:30–14:40 | Latecomers: aparecen en **Equipos** con una sugerencia de un toque (equipo de 3, quinto excepcional, segunda opción, equipo nuevo con 3 compatibles). |
 | Sprint y pitch | **A3 y evaluación** por equipo: foto del A3, bloques completos, Problema / Valor / Prueba, feedback, reconocimiento y contribución individual. Los founders pueden usar una cuenta STAFF y filtrar sus equipos. |
-| 15:27 | **Pasar a pitch** → **Abrir reflexión**. Cada participante completa la reflexión y recibe interpretación, próximo experimento y CTA de Espacio IDI. |
+| 15:27 | **Pasar a pitch** → **Abrir reflexión**. Cada participante completa la reflexión y recibe interpretación, próximo experimento y CTA de Espacio IDI. Quien la hizo en papel o no tiene celular se carga desde **A3 y evaluación** → «Reflexión en papel». |
 
-Las cuentas para staff, facilitadores y founders se crean en **Cuentas** (ADMIN) o con `pnpm staff:create <email> <clave> "<nombre>" STAFF`.
+**Cuentas y roles.** Se crean en **Cuentas** (ADMIN) o con `pnpm staff:create <email> <clave> "<nombre>" <ADMIN|STAFF>`.
+
+- **ADMIN**: staff principal (Director/Host y Control de 03 §1). Maneja fases, matching, publicación, movimientos, mesas, respaldos con WhatsApp y configuración.
+- **STAFF**: founders, facilitación y recepción. Hacen check-in, alta rápida, suman latecomers con la sugerencia del tablero y cargan A3, evaluación, contribución individual y reflexión en papel. Ven los teléfonos enmascarados (`•••• 4567`) y no descargan respaldos.
+- Tras 10 intentos fallidos de login la cuenta se bloquea 15 minutos (o hasta que un ADMIN le cambie la contraseña). Conviene desactivar las cuentas de founders al cerrar el evento.
+
+El detalle completo está en [07 — Roles y datos personales](docs/innovaton/07-implementation-decisions.md#roles-y-datos-personales).
 
 ### Backup y contingencia
 
-- **CSV** (Panel → Descargar CSV): nombre, WhatsApp, estado, modo, desafío 1, desafío 2, presencia, hora de check-in, desafío asignado, equipo, mesa y consentimientos. Alcanza para seguir el evento en papel.
+- **CSV** (Panel → Descargar CSV, solo ADMIN): nombre, WhatsApp, link `wa.me`, estado, modo, desafío 1, desafío 2, presencia, hora de check-in, desafío asignado, equipo, mesa y consentimientos. Usa `;` como separador, así abre bien con doble clic en Excel en español; Google Sheets lo detecta solo. Alcanza para seguir el evento en papel.
 - **Backup completo (JSON)**: todo el evento, incluidas reflexiones, evidencia e interpretaciones (sin las fotos).
 - **Imprimir**: QR de inscripción, equipos por mesa, tarjetas de mesa, lista de check-in y briefs con el A3 en blanco.
 - **Base completa**: `pg_dump "$DATABASE_URL" > innovaton-$(date +%F).sql` (incluye las fotos del A3). Neon también ofrece restauración a un punto en el tiempo desde su panel.
 
-Si cae internet, el evento sigue con el kit analógico de [03-operations.md](docs/innovaton/03-operations.md) §13, y los datos se pueden cargar después con el alta rápida.
+Si cae internet, el evento sigue con el kit analógico de [03-operations.md](docs/innovaton/03-operations.md) §13 (pestaña **Imprimir** → «Kit analógico»: cuestionario con clave E/C/I, inscripción, evaluación del founder y reflexión en papel). Los datos se cargan después con el alta rápida y la reflexión en papel. Si el panel pierde conexión, muestra «Sin conexión · datos de las HH:MM» y conserva lo último que vio.
 
 ## Deploy
 

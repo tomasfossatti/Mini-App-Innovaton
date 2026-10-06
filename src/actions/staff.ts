@@ -27,7 +27,9 @@ function revalidateEvent(eventId: string) {
 
 /**
  * Wrapper común: sesión + rol + validación de ids + revalidación de las pantallas del evento.
- * STAFF (founders, facilitación, check-in) solo hace check-in y alta rápida; el resto es ADMIN.
+ * STAFF (founders, facilitación, recepción) hace check-in, alta rápida y suma latecomers con las
+ * sugerencias (nunca mueven a quien ya tiene equipo). Fases, matching, publicación, movimientos
+ * manuales y mesas son ADMIN.
  */
 async function staffOp<T>(eventId: string, fn: () => Promise<T>, role: StaffRole = "ADMIN"): Promise<ActionResult<T>> {
   return runAction(async () => {
@@ -116,7 +118,7 @@ export async function assignLatecomerAction(
       allowFifth: z.boolean().parse(allowFifth),
     });
     return null;
-  });
+  }, "STAFF");
 }
 
 export async function createTeamAction(eventId: string, challengeId: string) {
@@ -131,7 +133,7 @@ export async function createTeamWithMembersAction(eventId: string, challengeId: 
     const ids = z.array(id).min(1).parse(participationIds);
     const team = await createTeamWithMembers(getDb(), eventId, id.parse(challengeId), ids);
     return { id: team.id, teamNumber: team.teamNumber, tableNumber: team.tableNumber };
-  });
+  }, "STAFF");
 }
 
 export async function deleteTeamAction(eventId: string, teamId: string) {

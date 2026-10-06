@@ -4,12 +4,13 @@ import { z } from "zod";
 import { getDb } from "@/lib/db/client";
 import type { ParticipationRow } from "@/lib/db/schema";
 import { readParticipantToken, setParticipantToken } from "@/lib/auth/participant-session";
-import { CAPABILITIES, MODES, REFLECTION_ACTIONS } from "@/lib/domain/constants";
+import { MODES } from "@/lib/domain/constants";
 import { isRegistered, nextStep, stepPath } from "@/lib/domain/flow";
 import { QUESTION_KEYS, shuffleOptions } from "@/lib/domain/questionnaire";
 import { DomainError } from "@/lib/services/errors";
 import { getEventBySlug } from "@/lib/services/events";
 import { submitReflection } from "@/lib/services/reflection";
+import { ReflectionSchema, type ReflectionFormInput } from "@/lib/validation/reflection";
 import {
   checkIn,
   finalizeAssessment,
@@ -31,6 +32,9 @@ const SESSION_LOST =
   "No encontramos tu sesión en este navegador. Empezá de nuevo o recuperá tu lugar con tu WhatsApp.";
 
 async function loadEvent(eventSlug: string) {
+  if (!/^[a-z0-9-]{1,80}$/.test(eventSlug)) {
+    throw new DomainError("EVENT_NOT_FOUND", "No encontramos este Innovatón.");
+  }
   const event = await getEventBySlug(getDb(), eventSlug);
   if (!event) throw new DomainError("EVENT_NOT_FOUND", "No encontramos este Innovatón.");
   return event;
@@ -202,18 +206,10 @@ export async function communityCtaAction(eventSlug: string): Promise<ActionResul
   });
 }
 
-const ReflectionSchema = z.object({
-  postClarity: scale,
-  selectedActions: z.array(z.enum(REFLECTION_ACTIONS)).min(1, "Marcá al menos una cosa que hiciste."),
-  primaryContributionText: z.string().max(500, "El texto puede tener hasta 500 caracteres.").nullable(),
-  primaryCapability: z.enum(CAPABILITIES),
-  perceivedValue: scale,
-  initialModeUsefulness: scale,
-});
 
 export async function submitReflectionAction(
   eventSlug: string,
-  input: z.input<typeof ReflectionSchema>,
+  input: ReflectionFormInput,
 ): Promise<ActionResult<{ next: string }>> {
   return runAction(async () => {
     const data = ReflectionSchema.parse(input);

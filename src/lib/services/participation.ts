@@ -307,7 +307,6 @@ export interface RegisterInput {
 
 export interface RegisterResult {
   participation: ParticipationRow;
-  merged: boolean;
   late: boolean;
 }
 
@@ -327,7 +326,7 @@ export async function registerParticipant(
   now: Date = new Date(),
 ): Promise<RegisterResult> {
   if (isRegistered(participation.status)) {
-    return { participation, merged: false, late: false }; // doble submit
+    return { participation, late: false }; // doble submit
   }
   if (!PHASES_OPEN_FOR_START.includes(event.phase)) {
     throw new DomainError("REGISTRATION_CLOSED", closedMessage(event));
@@ -351,7 +350,7 @@ export async function registerParticipant(
   return db.transaction(async (tx) => {
     await lockEvent(tx, event.id);
     const current = await reload(tx, participation.id);
-    if (isRegistered(current.status)) return { participation: current, merged: false, late };
+    if (isRegistered(current.status)) return { participation: current, late };
 
     const known = await findParticipantByWhatsapp(tx, phone.e164);
     if (known) {
@@ -385,7 +384,7 @@ export async function registerParticipant(
       })
       .where(eq(participations.id, current.id))
       .returning();
-    return { participation: updated, merged: false, late };
+    return { participation: updated, late };
   });
 }
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { manualCheckInAction, undoCheckInAction } from "@/actions/staff";
 import type { DashboardPerson } from "@/lib/services/operations";
 import { MODE_SHORT } from "@/lib/domain/copy";
+import { phoneMatches } from "@/lib/domain/search";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/Field";
@@ -135,12 +136,10 @@ export function PeopleList({
   };
   const visible = useMemo(() => {
     const q = normalize(query.trim());
-    const typed = query.replace(/\D/g, "");
-    const digits = maskedPhones ? typed.slice(-4) : typed;
     return people.filter((p) => {
       if (!matches(p, filter, recent)) return false;
       if (!q) return true;
-      return normalize(p.name).includes(q) || (digits.length >= 3 && p.whatsapp.replace(/\D/g, "").includes(digits));
+      return normalize(p.name).includes(q) || phoneMatches(p.whatsapp, query, { masked: maskedPhones });
     });
   }, [people, query, filter, recent, maskedPhones]);
 

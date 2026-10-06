@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkInAction } from "@/actions/participant";
+import { standPhrase } from "@/lib/domain/copy";
 import type { ParticipantState } from "@/lib/services/participation";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -21,10 +22,6 @@ export interface StatusEventInfo {
   icsUrl: string;
 }
 
-/** PRD §13: "Volvé al stand de Espacio IDI…" con el lugar por defecto. */
-function standLabel(location: string): string {
-  return location.trim().toLowerCase() === "stand espacio idi" ? "stand de Espacio IDI" : location;
-}
 
 /** Cada cuánto consultar según el estado (02 §11: 5–10 s solo mientras espera equipo). */
 const FINISHED_PHASES = ["REFLECTION", "CLOSED"];
@@ -273,7 +270,7 @@ export function StatusView({
       <h1 className="text-3xl font-extrabold">Estás preinscripto.</h1>
       <div className="space-y-1 text-lg">
         <p>
-          Volvé al {standLabel(info.location)} entre {info.checkinTime} y {info.closeTime}.
+          Volvé al {standPhrase(info.location)} entre {info.checkinTime} y {info.closeTime}.
         </p>
         <p className="font-semibold">A las {info.startTime} empezamos.</p>
         <p className="text-base text-muted">{info.dateLabel}</p>

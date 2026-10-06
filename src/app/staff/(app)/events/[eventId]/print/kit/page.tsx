@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaffPage } from "@/lib/auth/staff";
 import { getDb } from "@/lib/db/client";
-import { MODE_LABELS, MODE_SHORT, PRIMARY_CONTRIBUTION_OPTIONS, REFLECTION_ACTION_LABELS } from "@/lib/domain/copy";
+import { MODE_LABELS, MODE_SHORT, PRIMARY_CONTRIBUTION_OPTIONS, REFLECTION_ACTION_LABELS, standPhrase } from "@/lib/domain/copy";
 import { REFLECTION_ACTIONS } from "@/lib/domain/constants";
 import { QUESTIONS, TIEBREAK_OPTIONS, TIEBREAK_PROMPT } from "@/lib/domain/questionnaire";
 import { formatTime } from "@/lib/domain/time";
@@ -122,7 +122,7 @@ export default async function AnalogKitPage(props: PageProps<"/staff/events/[eve
 
       <Sheet title="Inscripción en papel">
         <p>
-          Volvé al {event.locationLabel} entre {formatTime(event.checkinOpensAt, tz)} y {formatTime(event.registrationClosesAt, tz)}. A
+          Volvé al {standPhrase(event.locationLabel)} entre {formatTime(event.checkinOpensAt, tz)} y {formatTime(event.registrationClosesAt, tz)}. A
           las {formatTime(event.startsAt, tz)} empezamos.
         </p>
         {Array.from({ length: 6 }, (_, i) => (

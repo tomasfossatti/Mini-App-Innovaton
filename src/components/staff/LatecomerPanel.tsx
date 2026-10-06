@@ -18,7 +18,7 @@ function LatecomerRow({
   challengeName,
   nameById,
   published,
-  readOnly,
+  canMove,
 }: {
   eventId: string;
   person: BoardPerson;
@@ -27,7 +27,8 @@ function LatecomerRow({
   challengeName: (id: string | null) => string;
   nameById: Map<string, string>;
   published: boolean;
-  readOnly: boolean;
+  /** Mover a mano es ADMIN; las sugerencias (nunca mueven a nadie que ya tenga equipo) son para todo el staff. */
+  canMove: boolean;
 }) {
   const router = useRouter();
   const { run, pending, error } = useActionRunner();
@@ -84,9 +85,9 @@ function LatecomerRow({
           {person.secondChoiceAny ? "Cualquiera" : challengeName(person.secondChoiceId)}
         </span>
       </div>
-      {readOnly ? null : (
       <div className="flex flex-wrap items-center gap-2">
         {suggestion}
+        {canMove ? (
         <select
           aria-label={`Asignar a ${person.name} manualmente`}
           className="min-h-11 w-full min-w-0 max-w-full rounded-xl border border-line bg-paper px-2 text-sm sm:w-auto"
@@ -105,8 +106,8 @@ function LatecomerRow({
             </option>
           ))}
         </select>
+        ) : null}
       </div>
-      )}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
     </li>
   );
@@ -119,7 +120,7 @@ export function LatecomerPanel({
   options,
   challenges,
   published,
-  readOnly = false,
+  canMove = true,
 }: {
   eventId: string;
   people: BoardPerson[];
@@ -127,7 +128,7 @@ export function LatecomerPanel({
   options: TeamOption[];
   challenges: { id: string; startupName: string }[];
   published: boolean;
-  readOnly?: boolean;
+  canMove?: boolean;
 }) {
   const names = new Map(challenges.map((c) => [c.id, c.startupName]));
   const challengeName = (id: string | null) => (id ? (names.get(id) ?? "—") : "—");
@@ -144,7 +145,7 @@ export function LatecomerPanel({
           challengeName={challengeName}
           nameById={nameById}
           published={published}
-          readOnly={readOnly}
+          canMove={canMove}
         />
       ))}
     </ul>

@@ -17,8 +17,10 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - **Inscripción tardía.** En MATCHING o SPRINT se puede seguir inscribiendo, con un aviso: la persona queda REGISTERED y el staff decide si la suma como latecomer. Así no se pierde su hipótesis ni su WhatsApp. En PITCH, REFLECTION y CLOSED la inscripción está cerrada.
 - **Check-in desde el celular** solo en CHECKIN y MATCHING. Después de publicar, el check-in lo hace el staff (PRD §18: "después de 14:35, solo si el staff determina").
 - **Consentimiento operativo obligatorio, el de comunidad opcional.** Sin poder escribirle por WhatsApp no se puede operar el evento; las comunicaciones futuras son opcionales (PRD §11).
-- **Misma persona en dos dispositivos.** Al inscribirse con un WhatsApp que ya tiene inscripción en el evento, se reutiliza esa inscripción y el dispositivo nuevo pasa a usarla. No se pierde el check-in. Si ya tenía equipo, no se cambian sus elecciones.
-- **Recuperación de sesión** por WhatsApp normalizado (identidad persistente, spec §5). Rota el token. Riesgo aceptado para un evento de un día: quien conozca el número de otra persona puede ver su mesa.
+- **WhatsApp ya inscripto en el evento.** Una segunda inscripción con ese número se rechaza y la pantalla ofrece «Recuperar mi lugar». Así nadie puede pisar el nombre, las elecciones o los consentimientos de otra persona usando su número. Quien cambió de celular recupera su inscripción tal como estaba, con el check-in incluido.
+- **Recuperación de sesión** por WhatsApp normalizado (identidad persistente, spec §5). Rota el token, así que el dispositivo anterior deja de estar asociado. Alcance real del riesgo aceptado para un evento de un día: con el número de otra persona se puede ver su mesa y, si la reflexión está abierta y ella todavía no la hizo, enviarla en su nombre una sola vez. Si llegara a pasar, el staff lo detecta porque la persona real ve «Se perdió la sesión».
+- **Polling del participante** (02 §11): cada 6 s mientras espera equipo, como pide la spec. Además consulta cada 15–20 s mientras espera que abra el check-in o la reflexión, para que el botón aparezca sin recargar, y se detiene cuando ya no hay nada que esperar. El JSON de `/api/participant/state` usa `team.startupName`, `team.teamNumber` y `team.tableNumber`.
+- **Pasar a sprint, pitch o reflexión exige equipos publicados**: sin eso nadie ve su mesa ni puede reflexionar. Cerrar el evento sí se permite sin equipos.
 - **Al abrir la reflexión**, quienes estaban MATCHED pasan a EXPERIENCE_COMPLETED. Al publicar, quienes estaban REGISTERED (nunca hicieron check-in) pasan a NO_SHOW. El staff igual puede hacerles check-in después.
 - **Alta rápida por staff** para quien no tiene celular o para cargar planillas en papel: crea a la persona como presente, sin cuestionario (`initial_mode` nulo).
 
@@ -32,6 +34,10 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - Regenerar no borra borradores que ya tengan A3, evaluación u observaciones (error `DRAFT_HAS_RECORDS`).
 - Deshacer un check-in después de publicar vuelve a NO_SHOW, igual que el resto de quienes no llegaron.
 - Concurrencia: `pg_advisory_xact_lock(hashtext(event_id))` en generar, publicar, mover, crear equipo y cambiar mesa.
+- **Dos personas del staff con la misma pantalla.** Generar y publicar mandan la versión del tablero que se estaba viendo (composición de cada equipo y su mesa). Si otra persona lo cambió en el medio, el servidor rechaza con «Otra persona cambió los equipos» y la pantalla se actualiza. Lo mismo pasa con la evaluación del founder y los bloques del A3: no se pisa lo que guardó otra persona.
+- Sumar un latecomer como quinto exige confirmación explícita, también cuando dos staff suman a la vez al mismo equipo de 3.
+- Cambiar la mesa de un equipo por una ocupada avisa y pide confirmación antes de intercambiarlas.
+- Después del sprint no se puede dejar a alguien sin equipo (desaparecería del tablero y no podría reflexionar). Si se lo mueve a otro equipo y ya había reflexionado, su interpretación se recalcula con la evidencia del equipo nuevo.
 - Después de publicar, el botón de regenerar desaparece y el servidor rechaza el pedido.
 
 ## Educai
@@ -45,6 +51,28 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - **Recomendación:** DIVERGENT → investigar la divergencia; dos capacidades convergentes → explorar una complementaria (mapa fijo); una convergente → replicar; una señal → juntar más evidencia; sin evidencia → experimento según el modo inicial. Nunca se recomienda "mejorar la más baja".
 - **Reinterpretación:** si la evaluación u observación del founder llega después de la reflexión, se crea un snapshot nuevo (versionado) y el resultado del participante muestra el último.
 - **Pregunta 3 de la reflexión:** el texto es opcional; la categoría es obligatoria. La evidencia sale de la categoría elegida por la persona y el texto se guarda como `raw_text`.
+- **Reflexión en papel:** desde la vista de equipo, el staff carga la reflexión de quien la hizo en papel o no tiene celular (alta rápida). Pasa por el mismo servicio que la del participante: misma evidencia, interpretación e idempotencia.
+
+## Roles y datos personales
+
+| Acción | STAFF (founders, facilitación, recepción) | ADMIN (staff principal) |
+|---|---|---|
+| Panel con contadores y lista de inscriptos | sí, con teléfonos enmascarados (`•••• 4567`) | sí, con WhatsApp completo y link al recordatorio |
+| Check-in manual, deshacer, alta rápida | sí | sí |
+| Sumar latecomers con la sugerencia del tablero | sí (nunca mueve a quien ya tiene equipo) | sí |
+| A3, evaluación, contribución individual, reflexión en papel | sí | sí |
+| Kit en papel (sin datos personales) | sí | sí |
+| Fases, generar, publicar, mover a mano, mesas, borrar equipos | no | sí |
+| CSV, backup JSON y hoja de impresión con WhatsApp | no | sí |
+| Configuración del evento, desafíos y cuentas | no | sí |
+
+- Quien coordina el check-in, el matching y los latecomers (Responsable 2 de 03 §1) necesita una cuenta ADMIN. Founders y colaboradores usan STAFF. Conviene desactivar las cuentas de founders al cerrar el evento.
+- Login de staff: tras 10 intentos fallidos seguidos la cuenta se bloquea 15 minutos (o hasta que un ADMIN le cambie la contraseña).
+- El CSV de contingencia usa `;` como separador (lo que espera Excel en español; Google Sheets lo detecta solo), el WhatsApp en formato legible sin `+` y una columna con el link `wa.me`.
+
+## Panel
+
+- Contadores: Registrados, Presentes, Con equipo, Equipos y Finalizados (con reflexión). Combina el encabezado del PRD §27 con el de 02 §25.
 
 ## Founders
 

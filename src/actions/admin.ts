@@ -20,6 +20,7 @@ import { createStaffMember, resetStaffPassword, setStaffActive } from "@/lib/ser
 import { runAction, type ActionResult } from "./result";
 
 const time = z.string().regex(/^\d{2}:\d{2}$/, "Usá el formato HH:MM.");
+const id = z.uuid("Identificador inválido.");
 
 const EventFormSchema = z.object({
   name: z.string().trim().min(3, "Poné un nombre al evento.").max(120),
@@ -84,7 +85,7 @@ export async function updateEventAction(
 ): Promise<ActionResult> {
   return runAction(async () => {
     await requireStaffAction("ADMIN");
-    await updateEvent(getDb(), eventId, parseEventForm(formData));
+    await updateEvent(getDb(), id.parse(eventId), parseEventForm(formData));
     revalidatePath(`/staff/events/${eventId}`, "layout");
     return null;
   });
@@ -120,7 +121,7 @@ export async function createChallengeAction(
 ): Promise<ActionResult> {
   return runAction(async () => {
     await requireStaffAction("ADMIN");
-    await createChallenge(getDb(), eventId, parseChallengeForm(formData));
+    await createChallenge(getDb(), id.parse(eventId), parseChallengeForm(formData));
     revalidatePath(`/staff/events/${eventId}`, "layout");
     return null;
   });
@@ -134,7 +135,7 @@ export async function updateChallengeAction(
 ): Promise<ActionResult> {
   return runAction(async () => {
     await requireStaffAction("ADMIN");
-    await updateChallenge(getDb(), eventId, challengeId, parseChallengeForm(formData));
+    await updateChallenge(getDb(), id.parse(eventId), id.parse(challengeId), parseChallengeForm(formData));
     revalidatePath(`/staff/events/${eventId}`, "layout");
     return null;
   });
@@ -146,7 +147,7 @@ export async function deleteChallengeAction(
 ): Promise<ActionResult> {
   return runAction(async () => {
     await requireStaffAction("ADMIN");
-    await deleteChallenge(getDb(), eventId, challengeId);
+    await deleteChallenge(getDb(), id.parse(eventId), id.parse(challengeId));
     revalidatePath(`/staff/events/${eventId}`, "layout");
     return null;
   });
@@ -175,7 +176,7 @@ export async function createStaffAction(
 export async function setStaffActiveAction(staffId: string, active: boolean): Promise<ActionResult> {
   return runAction(async () => {
     const actor = await requireStaffAction("ADMIN");
-    await setStaffActive(getDb(), actor.id, staffId, active);
+    await setStaffActive(getDb(), actor.id, id.parse(staffId), z.boolean().parse(active));
     revalidatePath("/staff/members");
     return null;
   });
@@ -192,7 +193,7 @@ export async function resetStaffPasswordAction(
       .string()
       .min(8, "La contraseña necesita al menos 8 caracteres.")
       .parse(formData.get("password"));
-    await resetStaffPassword(getDb(), staffId, password);
+    await resetStaffPassword(getDb(), id.parse(staffId), password);
     revalidatePath("/staff/members");
     return null;
   });

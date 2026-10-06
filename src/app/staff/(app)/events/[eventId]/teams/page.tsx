@@ -25,7 +25,14 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
   const db = getDb();
   const event = await getEventById(db, eventId);
   if (!event) notFound();
-  const board = await getTeamsBoard(db, event.id);
+  const fullBoard = await getTeamsBoard(db, event.id);
+  // El tablero no muestra teléfonos: no se mandan al navegador (las cuentas STAFF no deben verlos).
+  const stripPhone = <T extends { whatsapp: string }>(p: T): T => ({ ...p, whatsapp: "" });
+  const board = {
+    ...fullBoard,
+    unassigned: fullBoard.unassigned.map(stripPhone),
+    teams: fullBoard.teams.map((t) => ({ ...t, members: t.members.map(stripPhone) })),
+  };
 
   const options: TeamOption[] = board.teams.map((t) => ({
     id: t.id,
@@ -51,7 +58,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
         teamCount={board.teams.length}
         presentCount={presentCount}
         unassignedCount={board.unassigned.length}
-        version={boardVersion(board)}
+        version={boardVersion(fullBoard)}
       />
       ) : (
         <Notice tone="info">
@@ -82,7 +89,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
               : "Quedaron sin equipo en el matching. Asignalos a mano o creá un equipo."}
           </p>
           <LatecomerPanel
-            readOnly={!isAdmin}
+            canMove={isAdmin}
             eventId={event.id}
             people={board.unassigned}
             teams={board.teams}

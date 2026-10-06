@@ -72,11 +72,12 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
         )}
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatTile label="Registrados" value={counts.registered} hint={`${counts.started} iniciaron`} />
         <StatTile label="Presentes" value={counts.present} />
+        <StatTile label="Con equipo" value={counts.matched} hint="equipo publicado" />
         <StatTile label="Equipos" value={counts.teams} hint={dashboard.teamsPublished ? "publicados" : "sin publicar"} />
-        <StatTile label="Reflexiones" value={counts.reflections} />
+        <StatTile label="Finalizados" value={counts.reflections} hint="con reflexión" />
       </div>
 
       {isAdmin ? (

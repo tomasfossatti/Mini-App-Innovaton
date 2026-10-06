@@ -1,5 +1,6 @@
 import type { EventRow } from "@/lib/db/schema";
 import { googleCalendarUrl } from "@/lib/domain/calendar";
+import { standPhrase } from "@/lib/domain/copy";
 import { formatTime } from "@/lib/domain/time";
 
 /** Datos del evento de calendario (PRD §13): referencia 14:20, alarma 10 minutos antes. */
@@ -7,7 +8,7 @@ export function calendarEventFor(event: EventRow) {
   const tz = event.timezone;
   return {
     title: `${event.name} — Espacio IDI`,
-    details: `Volvé al ${event.locationLabel} entre ${formatTime(event.checkinOpensAt, tz)} y ${formatTime(
+    details: `Volvé al ${standPhrase(event.locationLabel)} entre ${formatTime(event.checkinOpensAt, tz)} y ${formatTime(
       event.registrationClosesAt,
       tz,
     )} para confirmar tu lugar. A las ${formatTime(event.startsAt, tz)} empezamos.`,

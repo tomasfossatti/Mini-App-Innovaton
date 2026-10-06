@@ -203,6 +203,19 @@ test("recorrido completo: participantes + staff + Educai", async ({ browser }) =
   await first.getByRole("button", { name: "QUIERO PARTICIPAR DE LOS PRÓXIMOS DESAFÍOS" }).click();
   await expect(first.getByText(/Te vamos a avisar de los próximos desafíos/)).toBeVisible();
 
+  // ── Contingencia: Diego hizo la reflexión en papel y el staff la carga
+  await staff.page.goto(`${eventUrl}/teams`);
+  await staff.page.getByRole("link", { name: "A3 y evaluación" }).first().click();
+  await staff.page.getByText("Cargar la reflexión de Diego E2E").click();
+  const paper = staff.page.locator("details[open]");
+  await paper.getByRole("radiogroup", { name: /1\. Claridad/ }).getByRole("radio", { name: "4" }).click();
+  await paper.getByText("Propuse alternativas").click();
+  await paper.getByLabel("3. Aporte más importante").selectOption({ label: "Generar alternativas" });
+  await paper.getByRole("radiogroup", { name: /4\. ¿Su aporte/ }).getByRole("radio", { name: "5" }).click();
+  await paper.getByRole("radiogroup", { name: /5\. ¿La sugerencia/ }).getByRole("radio", { name: "3" }).click();
+  await paper.getByRole("button", { name: "Guardar reflexión de Diego E2E" }).click();
+  await expect(staff.page.getByText("Reflexión de Diego E2E cargada.")).toBeVisible();
+
   // ── Respaldo: CSV con presencia, equipo y mesa
   const csv = await staff.page.request.get(`/api/staff/events/${eventId}/export.csv`);
   expect(csv.status()).toBe(200);

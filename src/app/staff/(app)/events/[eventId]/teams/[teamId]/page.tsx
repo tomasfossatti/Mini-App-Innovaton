@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { requireStaffPage } from "@/lib/auth/staff";
 import { getDb } from "@/lib/db/client";
 import { CAPABILITY_LABELS, MODE_SHORT } from "@/lib/domain/copy";
+import { PHASES_OPEN_FOR_REFLECTION } from "@/lib/domain/constants";
 import { formatTime } from "@/lib/domain/time";
 import { getEventById } from "@/lib/services/events";
 import { getTeamDetail } from "@/lib/services/founder";
 import { A3Uploader } from "@/components/staff/A3Uploader";
+import { StaffReflectionForm } from "@/components/staff/StaffReflectionForm";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/components/staff/labels";
 import {
   A3BlocksForm,
@@ -30,6 +32,8 @@ export default async function TeamDetailPage(props: PageProps<"/staff/events/[ev
   const detail = await getTeamDetail(db, event.id, teamId);
   if (!detail) notFound();
   const { team, challenge, members, artifacts, assessment, observations, siblings } = detail;
+  const reflectionOpen = PHASES_OPEN_FOR_REFLECTION.includes(detail.eventPhase);
+  const withoutReflection = members.filter((m) => !m.hasReflection);
   const base = `/staff/events/${event.id}/teams`;
 
   return (
@@ -154,6 +158,31 @@ export default async function TeamDetailPage(props: PageProps<"/staff/events/[ev
           />
         ) : null}
       </Card>
+
+      {withoutReflection.length ? (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-bold">Reflexión en papel</h2>
+          {reflectionOpen ? (
+            <>
+              <p className="text-sm text-muted">
+                Para quien hizo la reflexión en papel o no tiene celular. Se interpreta igual que la del celular.
+              </p>
+              {withoutReflection.map((m) => (
+                <details key={m.participationId}>
+                  <summary className="min-h-11 cursor-pointer content-center font-semibold text-brand">
+                    Cargar la reflexión de {m.name}
+                  </summary>
+                  <div className="mt-2">
+                    <StaffReflectionForm eventId={event.id} participationId={m.participationId} name={m.name} />
+                  </div>
+                </details>
+              ))}
+            </>
+          ) : (
+            <p className="text-sm text-muted">Se habilita cuando se abre la reflexión (después de los pitches).</p>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

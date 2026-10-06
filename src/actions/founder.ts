@@ -5,6 +5,9 @@ import { z } from "zod";
 import { getDb } from "@/lib/db/client";
 import { requireStaffAction } from "@/lib/auth/staff";
 import { A3_BLOCKS, CAPABILITIES, OBSERVER_SOURCES } from "@/lib/domain/constants";
+import { requireEvent } from "@/lib/services/events";
+import { submitReflection } from "@/lib/services/reflection";
+import { ReflectionSchema, type ReflectionFormInput } from "@/lib/validation/reflection";
 import {
   addObservation,
   deleteArtifact,
@@ -96,5 +99,26 @@ export async function deleteArtifactAction(eventId: string, artifactId: string) 
   return founderOp(eventId, async () => {
     await deleteArtifact(getDb(), eventId, id.parse(artifactId));
     return null;
+  });
+}
+
+/**
+ * Reflexión hecha en papel (contingencia, 03 §13) o de alguien sin celular, cargada por el staff.
+ * Usa el mismo servicio que el participante: misma evidencia, interpretación e idempotencia.
+ */
+export async function submitReflectionByStaffAction(
+  eventId: string,
+  participationId: string,
+  input: ReflectionFormInput,
+) {
+  return founderOp(eventId, async () => {
+    const data = ReflectionSchema.parse(input);
+    const db = getDb();
+    const event = await requireEvent(db, eventId);
+    const result = await submitReflection(db, event, id.parse(participationId), {
+      ...data,
+      primaryContributionText: data.primaryContributionText?.trim() || null,
+    });
+    return { alreadySubmitted: result.alreadySubmitted };
   });
 }
