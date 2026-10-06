@@ -140,6 +140,7 @@ Todo está listo para Vercel + Postgres (Neon). `vercel-build` corre migraciones
 
 **Único paso manual** (requiere una cuenta y no se puede hacer desde la sesión que construyó el MVP, porque su red no tenía acceso a las APIs de Vercel ni de Neon):
 
+0. Mergear la rama `claude/exciting-cori-q4tu2d` a `main`. Vercel publica en producción la rama por defecto, y hoy `main` solo tiene los documentos.
 1. En [vercel.com/new](https://vercel.com/new), importar el repositorio `tomasfossatti/Mini-App-Innovaton`.
 2. En el proyecto: **Storage → Create Database → Neon (Postgres)**, región São Paulo, y conectarla al proyecto. Esto define `DATABASE_URL` y `DATABASE_URL_UNPOOLED`.
 3. En **Settings → Environment Variables**, agregar `ADMIN_EMAIL`, `ADMIN_PASSWORD` y, opcionalmente, `DEFAULT_EVENT_SLUG`.
