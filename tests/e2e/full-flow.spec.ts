@@ -214,7 +214,12 @@ test("recorrido completo: participantes + staff + Educai", async ({ browser }) =
   await paper.getByRole("radiogroup", { name: /4\. ¿Su aporte/ }).getByRole("radio", { name: "5" }).click();
   await paper.getByRole("radiogroup", { name: /5\. ¿La sugerencia/ }).getByRole("radio", { name: "3" }).click();
   await paper.getByRole("button", { name: "Guardar reflexión de Diego E2E" }).click();
-  await expect(staff.page.getByText("Reflexión de Diego E2E cargada.")).toBeVisible();
+  // La respuesta del guardado ya trae la página revalidada: el formulario de Diego desaparece
+  // (a veces junto con el aviso) y su fila pasa a «Reflexión hecha». Se verifica ese estado.
+  await expect(staff.page.getByText("Cargar la reflexión de Diego E2E")).toHaveCount(0);
+  await expect(
+    staff.page.getByRole("listitem").filter({ hasText: "Diego E2E" }).getByText("Reflexión hecha"),
+  ).toBeVisible();
 
   // ── Respaldo: CSV con presencia, equipo y mesa
   const csv = await staff.page.request.get(`/api/staff/events/${eventId}/export.csv`);

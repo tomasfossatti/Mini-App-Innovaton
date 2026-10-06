@@ -2,6 +2,7 @@ import "dotenv/config";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { connectionUrl } from "@/lib/db/url";
 
 async function main() {
   const url =
@@ -12,7 +13,7 @@ async function main() {
     console.error("[migrate] Falta DATABASE_URL");
     process.exit(1);
   }
-  const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  const sql = postgres(connectionUrl(url), { max: 1, prepare: false, onnotice: () => {} });
   try {
     await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });
     console.log("[migrate] OK");

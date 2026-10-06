@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "./schema";
+import { connectionUrl } from "./url";
 
 export type DB = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
@@ -11,7 +12,7 @@ type Cached = { sql: postgres.Sql; db: DB };
 const globalForDb = globalThis as unknown as { __innovatonDb?: Cached };
 
 export function createDb(url: string, options: { max?: number } = {}): Cached {
-  const sql = postgres(url, {
+  const sql = postgres(connectionUrl(url), {
     // Compatible con poolers en modo transacción (Neon, Supabase pgbouncer).
     prepare: false,
     max: options.max ?? (process.env.NODE_ENV === "production" ? 5 : 10),

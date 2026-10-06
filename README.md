@@ -39,7 +39,7 @@ pnpm dev                        # http://localhost:3000
 ```bash
 pnpm lint         # ESLint
 pnpm typecheck    # tipos de rutas de Next + tsc
-pnpm test         # 500+ tests unitarios y de integración (requiere la base innovaton_test, ver .env.test)
+pnpm test         # 550+ tests unitarios y de integración (requiere la base innovaton_test, ver .env.test)
 pnpm test:e2e     # build de producción + Playwright en viewport móvil (base innovaton_e2e)
 ```
 
@@ -79,15 +79,15 @@ Principios que el código respeta y los tests verifican:
 
 | Variable | Obligatoria | Uso |
 |---|---|---|
-| `DATABASE_URL` | sí | Postgres. En Neon/Supabase usar la URL con pooler. |
+| `DATABASE_URL` | sí | Postgres. En Neon/Supabase usar la URL con pooler. La URL de Neon se usa tal cual: el parámetro `channel_binding`, que el driver no soporta, se descarta al conectar. |
 | `MIGRATION_DATABASE_URL` | no | URL directa para migraciones. Si falta se usa `DATABASE_URL_UNPOOLED` (la crea Neon) o `DATABASE_URL`. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | sí (primer deploy) | Cuenta ADMIN que crea el seed si no existe. No pisa contraseñas existentes. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | sí (primer deploy) | Cuenta ADMIN que crea el seed si no existe. No pisa contraseñas existentes. La contraseña necesita 8 caracteres o más (si no, el build falla con un mensaje claro) y tiene que ser propia, nunca el valor de ejemplo de `.env.example`, que es público. |
 | `ADMIN_NAME` | no | Nombre visible de esa cuenta. |
-| `DEFAULT_EVENT_SLUG` | no | Evento al que redirige `/` (la URL corta del QR). Si falta, se usa el evento abierto más reciente. |
-| `SEED_DEMO` | no | `false` para no crear el evento DEMO. |
+| `DEFAULT_EVENT_SLUG` | no (recomendada el día del evento) | Evento al que redirige `/` (la URL corta del QR). Si falta, se usa el evento abierto con inicio más tardío, que puede ser el DEMO. |
+| `SEED_DEMO` | no | `false` para no crear el evento DEMO. Por defecto se crea, sirve para ensayar en producción y no se vuelve a crear si después se cierra. |
 | `DEMO_EVENT_DATE` | no | Fecha del evento DEMO (`YYYY-MM-DD`). |
 | `DEFAULT_PHONE_COUNTRY` | no | País para normalizar WhatsApp (por defecto `AR`). |
-| `PUBLIC_BASE_URL` | no | URL pública para el QR imprimible. Si falta se toma del request. |
+| `PUBLIC_BASE_URL` | recomendada en producción | URL pública para el QR imprimible, por ejemplo `https://<proyecto>.vercel.app`. Si falta, el QR usa el dominio desde el que se abrió **Imprimir**, y un dominio de preview de Vercel puede pedir login a los participantes. |
 
 ## Operación
 
@@ -107,7 +107,7 @@ En el evento, pestaña **Configuración** (solo ADMIN): cada desafío lleva star
 
 | Hora | Acción en la app |
 |---|---|
-| Antes | **Abrir inscripción**. Monitorear registrados por desafío. |
+| Antes | **Abrir inscripción**. Monitorear registrados por desafío. Imprimir la hoja del evento y el **Kit analógico** (pestaña **Imprimir**) mientras hay conexión, e iniciar sesión en los celulares del staff y de los founders. |
 | 14:10–14:20 | Recordatorio por WhatsApp: tocar el teléfono de cada persona abre WhatsApp con el mensaje listo. |
 | 14:15 | **Descargar CSV** (respaldo). |
 | 14:20 | **Abrir check-in**. Quien se inscribe desde ahora queda presente automáticamente. Check-in manual con el buscador; **Alta rápida** para quien no tiene celular. |
@@ -132,7 +132,7 @@ El detalle completo está en [07 — Roles y datos personales](docs/innovaton/07
 - **Imprimir**: QR de inscripción, equipos por mesa, tarjetas de mesa, lista de check-in y briefs con el A3 en blanco.
 - **Base completa**: `pg_dump "$DATABASE_URL" > innovaton-$(date +%F).sql` (incluye las fotos del A3). Neon también ofrece restauración a un punto en el tiempo desde su panel.
 
-Si cae internet, el evento sigue con el kit analógico de [03-operations.md](docs/innovaton/03-operations.md) §13 (pestaña **Imprimir** → «Kit analógico»: cuestionario con clave E/C/I, inscripción, evaluación del founder y reflexión en papel). Los datos se cargan después con el alta rápida y la reflexión en papel. Si el panel pierde conexión, muestra «Sin conexión · datos de las HH:MM» y conserva lo último que vio.
+Si cae internet, el evento sigue con el kit analógico de [03-operations.md](docs/innovaton/03-operations.md) §13, que hay que imprimir antes (pestaña **Imprimir** → «Kit analógico»: cuestionario con clave E/C/I, inscripción, evaluación del founder y reflexión en papel). Con la lista de check-in impresa, que trae 1ª y 2ª opción, los equipos se arman a mano: separar por desafío, equipos de 3–4 y segunda opción para quien quede en grupos de 1–2. Los datos se cargan después: alta rápida y check-in manual, **+ Equipo vacío** y mover personas para recrear los equipos de papel sin regenerar, cambiar mesas, publicar, y cargar evaluaciones y reflexiones en papel. Si el panel pierde conexión, muestra «Sin conexión · datos de las HH:MM» y conserva lo último que vio.
 
 ## Deploy
 
@@ -140,13 +140,27 @@ Todo está listo para Vercel + Postgres (Neon). `vercel-build` corre migraciones
 
 **Único paso manual** (requiere una cuenta y no se puede hacer desde la sesión que construyó el MVP, porque su red no tenía acceso a las APIs de Vercel ni de Neon):
 
-0. Mergear la rama `claude/exciting-cori-q4tu2d` a `main`. Vercel publica en producción la rama por defecto, y hoy `main` solo tiene los documentos.
-1. En [vercel.com/new](https://vercel.com/new), importar el repositorio `tomasfossatti/Mini-App-Innovaton`.
-2. En el proyecto: **Storage → Create Database → Neon (Postgres)**, región São Paulo, y conectarla al proyecto. Esto define `DATABASE_URL` y `DATABASE_URL_UNPOOLED`.
-3. En **Settings → Environment Variables**, agregar `ADMIN_EMAIL`, `ADMIN_PASSWORD` y, opcionalmente, `DEFAULT_EVENT_SLUG`.
-4. **Deploy** (o Redeploy si el primer build corrió antes de conectar la base). Verificar `https://<proyecto>.vercel.app/api/health` → `{"ok":true,"db":"up"}`.
+1. Mergear el PR de la rama `claude/exciting-cori-q4tu2d` a `main`. Vercel publica en producción la rama por defecto, y antes del merge `main` solo tiene los documentos.
+2. En [vercel.com/new](https://vercel.com/new), importar el repositorio `tomasfossatti/Mini-App-Innovaton`. Vercel detecta Next.js y toma el build de `vercel.json`; no hace falta cambiar nada.
+3. En el proyecto: **Storage → Create Database → Neon (Postgres)**, región São Paulo (`sa-east-1`), y conectarla al proyecto para todos los entornos, dejando el prefijo por defecto. Esto define `DATABASE_URL` y `DATABASE_URL_UNPOOLED`.
+4. En **Settings → Environment Variables** (entorno Production), agregar:
+   - `ADMIN_EMAIL`: el email de la cuenta ADMIN.
+   - `ADMIN_PASSWORD`: una contraseña propia de 8 caracteres o más.
+   - `PUBLIC_BASE_URL`: el dominio de producción, `https://<proyecto>.vercel.app` (o el dominio propio si se configura uno).
+5. **Deploy** (o **Redeploy** si el primer build corrió antes de conectar la base). El log del build muestra `[migrate] OK` y `[seed] ADMIN creado`.
+6. Verificar `https://<proyecto>.vercel.app/api/health` → `{"ok":true,"db":"up"}`, entrar a `/staff/login` con la cuenta ADMIN y anotar la URL en la línea «Deployment» de este README.
+
+Antes del evento real: crear el evento y cargar los desafíos (ver [Operación](#operación)), agregar `DEFAULT_EVENT_SLUG=<identificador del evento>` y hacer **Redeploy** (Vercel aplica las variables en el deploy siguiente), y pasar el evento DEMO a **Cerrado** si se usó para ensayar.
 
 Supabase funciona igual: alcanza con usar su connection string con pooler como `DATABASE_URL`.
+
+## Limitaciones conocidas
+
+- **Muy poca gente presente.** Con unas 6 personas o menos, si nadie coincide en desafío, el matching puede no formar ningún equipo, y en ese caso el tablero no ofrece **+ Equipo vacío**. Con la asistencia esperada (20–60) no pasa. En un ensayo con pocos celulares alcanza con que al menos 3 personas elijan el mismo desafío.
+- **Personas que el matching no ubica.** En casos raros la consolidación deja a alguien sin equipo. Nunca se pierde: aparece en **Presentes sin equipo** con su 1ª y 2ª opción, y el staff lo asigna a mano.
+- **Recuperación por WhatsApp sin segundo factor.** Quien conoce el número de otra persona puede abrir su sesión: ve su mesa, su resultado final y, si la reflexión está abierta y la otra persona no la hizo, puede enviarla una sola vez. No ve nombre ni teléfono. Riesgo aceptado para un evento de una hora (ver 07).
+- **Bloqueo de login.** Diez intentos fallidos bloquean la cuenta 15 minutos, aunque después se use la contraseña correcta. Las sesiones abiertas no se ven afectadas: conviene que el staff inicie sesión antes del evento y tener dos cuentas ADMIN.
+- **Inscripciones en papel.** Al cargarlas con el alta rápida no se guarda el modo E/C/I del cuestionario en papel; la interpretación final se hace sin hipótesis inicial.
 
 ## Fuera del MVP
 
