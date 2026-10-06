@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import QRCode from "qrcode";
 import { notFound } from "next/navigation";
 import { requireStaffPage } from "@/lib/auth/staff";
@@ -38,7 +39,12 @@ export default async function PrintPage(props: PageProps<"/staff/events/[eventId
           Material de contingencia: QR, equipos por mesa, tarjetas de mesa, lista de check-in y briefs. Imprimilo antes del
           evento y otra vez después de publicar los equipos.
         </p>
-        <PrintButton />
+        <div className="flex items-center gap-3">
+          <Link href={`/staff/events/${event.id}/print/kit`} className="font-semibold text-brand underline underline-offset-4">
+            Kit analógico (cuestionario, clave, reflexión) →
+          </Link>
+          <PrintButton />
+        </div>
       </div>
 
       <Section title="INNOVATÓN — INSCRIPCIONES" breakBefore={false}>
