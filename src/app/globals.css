@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* Tokens de diseño. Neutros a propósito: reemplazar --color-brand/--color-accent
+   por la identidad de Espacio IDI cambia toda la app. */
+@theme {
+  --color-ink: #10202b;
+  --color-muted: #55656d;
+  --color-line: #d9e0de;
+  --color-canvas: #f4f5f1;
+  --color-paper: #ffffff;
+  --color-brand: #0d5c63;
+  --color-brand-strong: #08454b;
+  --color-brand-soft: #e3f0f0;
+  --color-accent: #f2a541;
+  --color-accent-soft: #fdf1df;
+  --color-ok: #217a3c;
+  --color-ok-soft: #e6f4ea;
+  --color-warn: #9a5b00;
+  --color-warn-soft: #fff4e0;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-explore: #1f5fa8;
+  --color-create: #7a3cc7;
+  --color-drive: #c2410c;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Botones grandes y táctiles: evitar zoom por doble tap en iOS. */
+button,
+a,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-break {
+    break-before: page;
+  }
+}
