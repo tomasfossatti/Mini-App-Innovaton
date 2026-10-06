@@ -2,7 +2,7 @@
 
 Web mobile-first que opera el Innovatón de punta a punta. El participante descubre una hipótesis de aporte, elige desafío, se inscribe, vuelve, hace check-in, recibe startup, equipo y mesa, reflexiona y recibe una interpretación con un próximo experimento. El staff controla registros y presentes, arma y publica equipos, resuelve latecomers, registra el A3 y las evaluaciones y descarga respaldos para seguir en papel si hace falta.
 
-**Deployment:** pendiente del único paso manual descrito en [Deploy](#deploy). Al completarlo, la URL queda en esta línea: `https://<proyecto>.vercel.app`.
+**Deployment:** https://mini-app-innovaton.vercel.app (staff en `/staff/login`).
 
 ## Documentación
 
@@ -150,7 +150,7 @@ Todo está listo para Vercel + Postgres (Neon). `vercel-build` corre migraciones
    - `ADMIN_PASSWORD`: una contraseña propia de 8 caracteres o más.
    - `PUBLIC_BASE_URL`: el dominio de producción, `https://<proyecto>.vercel.app` (o el dominio propio si se configura uno).
 5. **Deploy** (o **Redeploy** si el primer build corrió antes de conectar la base). El log del build muestra `[migrate] OK` y `[seed] ADMIN creado`.
-6. Verificar `https://<proyecto>.vercel.app/api/health` → `{"ok":true,"db":"up"}`, entrar a `/staff/login` con la cuenta ADMIN y anotar la URL en la línea «Deployment» de este README.
+6. Verificar `https://<proyecto>.vercel.app/api/health` → `{"ok":true,"db":"up"}` y entrar a `/staff/login` con la cuenta ADMIN.
 
 Antes del evento real: crear el evento y cargar los desafíos (ver [Operación](#operación)), agregar `DEFAULT_EVENT_SLUG=<identificador del evento>` y hacer **Redeploy** (Vercel aplica las variables en el deploy siguiente), y pasar el evento DEMO a **Cerrado** si se usó para ensayar.
 
