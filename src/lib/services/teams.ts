@@ -49,6 +49,7 @@ import {
 } from "@/lib/domain/matching";
 import { DomainError } from "./errors";
 import { hasPublishedTeams, isUuid, listChallenges, lockEvent, requireEvent } from "./events";
+import { interpretParticipation } from "./reflection";
 
 // Equipos: matching, edición, publicación y latecomers
 // (02 §10, §13–§18, §28–§29; PRD §16–§18; operaciones §3 y §11).
@@ -549,6 +550,11 @@ export async function moveParticipant(
     const participation = await requireParticipation(tx, eventId, participationId);
     const target = targetTeamId === null ? null : await requireTeam(tx, eventId, targetTeamId);
     await applyMove(tx, participation, target, source);
+    // Si ya reflexionó, su interpretación pasa a usar la evidencia del equipo nuevo.
+    const reflected = participation.status === "REFLECTION_COMPLETED" || participation.status === "INTERPRETED";
+    if (reflected && participation.teamId !== (target?.id ?? null)) {
+      await interpretParticipation(tx, participation.id);
+    }
   });
 }
 

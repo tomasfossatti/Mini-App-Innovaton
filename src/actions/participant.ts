@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db/client";
 import { readParticipantToken, setParticipantToken } from "@/lib/auth/participant-session";
 import { CAPABILITIES, MODES, REFLECTION_ACTIONS } from "@/lib/domain/constants";
 import { nextStep, stepPath } from "@/lib/domain/flow";
-import { QUESTION_KEYS } from "@/lib/domain/questionnaire";
+import { QUESTION_KEYS, shuffleOptions } from "@/lib/domain/questionnaire";
 import { DomainError } from "@/lib/services/errors";
 import { getEventBySlug } from "@/lib/services/events";
 import { submitReflection } from "@/lib/services/reflection";
@@ -97,7 +97,10 @@ export async function finalizeAssessmentAction(
     const parsed = AnswersSchema.parse(answers);
     const { participation } = await loadContext(eventSlug);
     const outcome = await finalizeAssessment(getDb(), participation, parsed);
-    if (outcome.kind === "TIE") return { kind: "TIE" as const, modes: outcome.modes };
+    if (outcome.kind === "TIE") {
+      // Mismo orden estable que muestra la pantalla al recargar (sin sesgo hacia la primera opción).
+      return { kind: "TIE" as const, modes: shuffleOptions(outcome.modes, `${participation.id}:TIEBREAK`) };
+    }
     return { kind: "RESOLVED" as const, next: stepPath(eventSlug, "result") };
   });
 }
