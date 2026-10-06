@@ -46,6 +46,11 @@ export function RecoverForm({ eventSlug }: { eventSlug: string }) {
         />
       </Field>
       <ActionError error={error} needsReload={needsReload} />
+      {error && needsReload ? (
+        <p className="text-sm text-muted">
+          Cada código sirve una sola vez. Si después de recargar no entraste, pedí uno nuevo en el stand.
+        </p>
+      ) : null}
       <Button type="submit" pending={pending} pendingLabel="Buscando…">
         RECUPERAR MI LUGAR
       </Button>

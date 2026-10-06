@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { CountryCode } from "libphonenumber-js";
 import type { DbOrTx } from "@/lib/db/client";
 import {
@@ -621,7 +621,10 @@ export async function staffQuickAdd(
         .update(participations)
         .set({
           ...(canUpdateChoices ? choices : {}),
-          ...(canSetMode ? { initialMode: input.initialMode } : {}),
+          // coalesce: si el cuestionario del celular terminó en el mismo instante, gana ese modo.
+          ...(canSetMode
+            ? { initialMode: sql`coalesce(${participations.initialMode}, ${input.initialMode}::initial_mode)` }
+            : {}),
           status: MARK_PRESENT_FROM.includes(existing.status) ? "CHECKED_IN" : existing.status,
           registeredAt: existing.registeredAt ?? now,
           operationalConsentAt: existing.operationalConsentAt ?? now,
