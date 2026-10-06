@@ -351,6 +351,9 @@ export const staffMembers = pgTable("staff_members", {
   passwordHash: text("password_hash").notNull(),
   role: staffRoleEnum("role").notNull().default("STAFF"),
   active: boolean("active").notNull().default(true),
+  // Freno a la prueba de contraseñas: tras varios fallos seguidos la cuenta se bloquea un rato.
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
   createdAt: createdAt(),
 });
 

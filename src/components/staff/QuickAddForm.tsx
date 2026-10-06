@@ -39,6 +39,8 @@ export function QuickAddForm({
       setDone(res.data.created ? `${name} quedó presente.` : `${name} ya estaba inscripta/o: quedó presente.`);
       setName("");
       setWhatsapp("");
+      setFirst("");
+      setSecond(ANY);
     }
   }
 
@@ -51,7 +53,16 @@ export function QuickAddForm({
         <TextInput id="qa-wa" type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} required />
       </Field>
       <Field label="Desafío 1" htmlFor="qa-first">
-        <Select id="qa-first" value={first} onChange={(e) => setFirst(e.target.value)} required>
+        <Select
+          id="qa-first"
+          value={first}
+          onChange={(e) => {
+            setFirst(e.target.value);
+            // Si la 2ª quedaba igual a la nueva 1ª, se vuelve a "Cualquiera" (lo que se ve en pantalla).
+            if (second === e.target.value) setSecond(ANY);
+          }}
+          required
+        >
           <option value="">Elegí…</option>
           {challenges.map((c) => (
             <option key={c.id} value={c.id}>

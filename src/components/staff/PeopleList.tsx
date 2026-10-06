@@ -24,14 +24,28 @@ function normalize(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-function matches(p: DashboardPerson, filter: Filter): boolean {
-  if (filter === "pending") return p.status === "REGISTERED" || p.status === "NO_SHOW";
+function matches(p: DashboardPerson, filter: Filter, recent?: Set<string>): boolean {
+  if (filter === "pending") {
+    // Quien acaba de hacer check-in queda unos segundos en la lista: así la fila no se corre
+    // bajo el dedo y nadie marca presente a la persona equivocada.
+    return p.status === "REGISTERED" || p.status === "NO_SHOW" || Boolean(recent?.has(p.participationId));
+  }
   if (filter === "present") return p.checkedInAt !== null;
   if (filter === "unassigned") return p.checkedInAt !== null && !p.team;
   return true;
 }
 
-function PersonRow({ person, eventId, reminder }: { person: DashboardPerson; eventId: string; reminder: string }) {
+function PersonRow({
+  person,
+  eventId,
+  reminder,
+  onCheckedIn,
+}: {
+  person: DashboardPerson;
+  eventId: string;
+  reminder: string;
+  onCheckedIn: (id: string) => void;
+}) {
   const { run, pending, error } = useActionRunner();
   const status = STATUS_LABELS[person.status];
   const canCheckIn = person.status === "REGISTERED" || person.status === "NO_SHOW";
@@ -46,14 +60,18 @@ function PersonRow({ person, eventId, reminder }: { person: DashboardPerson; eve
           {person.addedByStaff ? <Badge tone="accent">Alta staff</Badge> : null}
         </div>
         <p className="mt-0.5 text-sm text-muted">
-          <a
-            href={`https://wa.me/${person.waNumber}?text=${encodeURIComponent(reminder)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-brand underline-offset-2 hover:underline"
-          >
-            {person.whatsapp}
-          </a>
+          {person.waNumber ? (
+            <a
+              href={`https://wa.me/${person.waNumber}?text=${encodeURIComponent(reminder)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand underline-offset-2 hover:underline"
+            >
+              {person.whatsapp}
+            </a>
+          ) : (
+            <span>{person.whatsapp}</span>
+          )}
           {" · "}1ª {person.firstChoice ?? "—"} · 2ª {person.secondChoice ?? "—"}
           {person.team ? ` · ${person.team.startupName} Eq. ${person.team.teamNumber} · Mesa ${person.team.tableNumber}` : ""}
           {person.team && !person.team.published ? " (borrador)" : ""}
@@ -61,7 +79,14 @@ function PersonRow({ person, eventId, reminder }: { person: DashboardPerson; eve
         {error ? <p className="text-sm font-medium text-danger">{error}</p> : null}
       </div>
       {canCheckIn ? (
-        <Button size="md" pending={pending} onClick={() => void run(() => manualCheckInAction(eventId, person.participationId))}>
+        <Button
+          size="md"
+          pending={pending}
+          onClick={() => {
+            onCheckedIn(person.participationId);
+            void run(() => manualCheckInAction(eventId, person.participationId));
+          }}
+        >
           Check-in
         </Button>
       ) : null}
@@ -87,28 +112,43 @@ export function PeopleList({
   eventId,
   people,
   reminder,
+  maskedPhones = false,
 }: {
   eventId: string;
   people: DashboardPerson[];
   reminder: string;
+  /** Cuentas STAFF ven solo los últimos 4 dígitos: la búsqueda por teléfono usa esos 4. */
+  maskedPhones?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [recent, setRecent] = useState<Set<string>>(() => new Set());
+  const markRecent = (id: string) => {
+    setRecent((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      setRecent((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 6000);
+  };
   const visible = useMemo(() => {
     const q = normalize(query.trim());
-    const digits = query.replace(/\D/g, "");
+    const typed = query.replace(/\D/g, "");
+    const digits = maskedPhones ? typed.slice(-4) : typed;
     return people.filter((p) => {
-      if (!matches(p, filter)) return false;
+      if (!matches(p, filter, recent)) return false;
       if (!q) return true;
       return normalize(p.name).includes(q) || (digits.length >= 3 && p.whatsapp.replace(/\D/g, "").includes(digits));
     });
-  }, [people, query, filter]);
+  }, [people, query, filter, recent, maskedPhones]);
 
   return (
     <div className="space-y-3">
       <TextInput
         type="search"
-        placeholder="Buscar por nombre o teléfono"
+        placeholder={maskedPhones ? "Buscar por nombre o últimos 4 dígitos" : "Buscar por nombre o teléfono"}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Buscar participante"
@@ -139,7 +179,7 @@ export function PeopleList({
       ) : (
         <ul className="divide-y divide-line">
           {visible.map((p) => (
-            <PersonRow key={p.participationId} person={p} eventId={eventId} reminder={reminder} />
+            <PersonRow key={p.participationId} person={p} eventId={eventId} reminder={reminder} onCheckedIn={markRecent} />
           ))}
         </ul>
       )}

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** Backup completo del evento en JSON (sin fotos). Solo staff. */
 export async function GET(_request: Request, ctx: RouteContext<"/api/staff/events/[eventId]/backup.json">) {
-  if (!(await staffForRoute())) return new Response("No autorizado", { status: 401 });
+  if (!(await staffForRoute("ADMIN"))) return new Response("No autorizado: el respaldo con datos personales es solo para cuentas ADMIN.", { status: 401 });
   const { eventId } = await ctx.params;
   if (!isUuid(eventId)) return new Response("Evento inexistente", { status: 404 });
   try {

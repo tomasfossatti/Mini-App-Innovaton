@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   and,
   asc,
@@ -240,6 +241,15 @@ async function applyMove(
   assertPresent(participation);
   const targetId = target?.id ?? null;
   if (participation.teamId === targetId) return;
+  // Después del sprint, dejar a alguien sin equipo lo haría desaparecer del tablero y le
+  // impediría reflexionar: solo se permite cambiarlo de equipo.
+  const afterSprint = ["EXPERIENCE_COMPLETED", "REFLECTION_COMPLETED", "INTERPRETED"].includes(participation.status);
+  if (targetId === null && afterSprint) {
+    throw new DomainError(
+      "CANNOT_UNASSIGN",
+      "Ya terminó el sprint: movela a otro equipo en lugar de dejarla sin equipo.",
+    );
+  }
 
   let status = participation.status;
   const targetPublished = Boolean(target?.publishedAt);
@@ -343,9 +353,38 @@ function people(n: number): string {
 // ---------------------------------------------------------------------------------------------
 // 1. Generar equipos (borrador)
 
+/**
+ * Versión del tablero: composición de cada equipo y su mesa. Si dos personas del staff miran el
+ * tablero a la vez, generar o publicar con una vista vieja pisaría los ajustes de la otra.
+ */
+export function boardVersion(board: Pick<TeamsBoard, "teams">): string {
+  const parts = board.teams
+    .map(
+      (t) =>
+        `${t.id}@${t.tableNumber}${t.publishedAt ? "P" : "D"}:${t.members
+          .map((m) => m.participationId)
+          .sort()
+          .join(",")}`,
+    )
+    .sort();
+  return createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 16);
+}
+
+async function assertBoardVersion(tx: DbOrTx, eventId: string, expected: string | undefined): Promise<void> {
+  if (expected === undefined) return;
+  const current = boardVersion(await getTeamsBoard(tx, eventId));
+  if (current !== expected) {
+    throw new DomainError(
+      "STALE_BOARD",
+      "Otra persona cambió los equipos hace un momento. Revisá la pantalla actualizada y volvé a intentar.",
+    );
+  }
+}
+
 export async function generateTeams(
   db: DbOrTx,
   eventId: string,
+  opts: { expectedVersion?: string } = {},
 ): Promise<{
   teamCount: number;
   assignedCount: number;
@@ -364,6 +403,7 @@ export async function generateTeams(
     if (event.phase !== "MATCHING") {
       throw new DomainError("WRONG_PHASE", "Para generar equipos primero cerrá la inscripción.");
     }
+    await assertBoardVersion(tx, eventId, opts.expectedVersion);
 
     // Borrar un borrador borra en cascada su A3, evaluación y evidencia: nunca en silencio.
     const [draftWithRecords] = await tx
@@ -486,6 +526,7 @@ export async function publishTeams(
   db: DbOrTx,
   eventId: string,
   now: Date = new Date(),
+  opts: { expectedVersion?: string } = {},
 ): Promise<{ alreadyPublished: boolean; teamCount: number; matchedCount: number; noShowCount: number }> {
   return db.transaction(async (tx) => {
     await lockEvent(tx, eventId);
@@ -508,6 +549,7 @@ export async function publishTeams(
     if (!anyTeam) {
       throw new DomainError("NO_TEAMS", "Todavía no hay equipos para publicar.");
     }
+    await assertBoardVersion(tx, eventId, opts.expectedVersion);
 
     await tx.update(teams).set({ publishedAt: now }).where(eq(teams.eventId, eventId));
     await tx
@@ -566,6 +608,8 @@ export async function assignLatecomer(
   eventId: string,
   participationId: string,
   teamId: string,
+  /** allowFifth=false cuando el staff creía que el equipo tenía 3: un quinto exige confirmación. */
+  opts: { allowFifth?: boolean } = {},
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await lockEvent(tx, eventId);
@@ -584,7 +628,14 @@ export async function assignLatecomer(
       );
     }
     // Cuarto o quinto excepcional, nunca sexto: protege de dos staff sumando a la vez.
-    if ((await teamSize(tx, team.id)) >= LATECOMER_MAX_TEAM_SIZE) {
+    const size = await teamSize(tx, team.id);
+    if (size === LATECOMER_MAX_TEAM_SIZE - 1 && opts.allowFifth === false) {
+      throw new DomainError(
+        "NEEDS_FIFTH_CONFIRMATION",
+        "Ese equipo ya tiene 4 personas: confirmá si la sumás como 5º (excepcional).",
+      );
+    }
+    if (size >= LATECOMER_MAX_TEAM_SIZE) {
       throw new DomainError(
         "TEAM_FULL",
         `Ese equipo ya tiene ${LATECOMER_MAX_TEAM_SIZE} personas. Si igual querés sumarla, usá el cambio manual.`,

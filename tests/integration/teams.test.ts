@@ -695,9 +695,11 @@ describe("moveParticipant", () => {
       assignmentSource: "MANUAL",
       status: "EXPERIENCE_COMPLETED",
     });
-    await moveParticipant(db, event.id, as[0].id, null);
+    // Dejarla sin equipo después del sprint la haría desaparecer del tablero: se rechaza.
+    const unassign = await caught(moveParticipant(db, event.id, as[0].id, null));
+    expect(unassign.code).toBe("CANNOT_UNASSIGN");
     expect(await participation(as[0].id)).toMatchObject({
-      teamId: null,
+      teamId: target.id,
       status: "EXPERIENCE_COMPLETED",
     });
 

@@ -207,9 +207,9 @@ test("recorrido completo: participantes + staff + Educai", async ({ browser }) =
   const csv = await staff.page.request.get(`/api/staff/events/${eventId}/export.csv`);
   expect(csv.status()).toBe(200);
   const csvText = await csv.text();
-  expect(csvText).toContain("nombre,whatsapp");
+  expect(csvText).toContain("nombre;whatsapp;whatsapp_link");
   expect(csvText).toContain("Ana E2E");
-  expect(csvText).toContain("+5493511000001");
+  expect(csvText).toContain("54 9 351 100 0001;https://wa.me/5493511000001");
   expect(csvText).toContain("Cualquiera");
   const anon = await first.request.get(`/api/staff/events/${eventId}/export.csv`);
   expect(anon.status()).toBe(401);

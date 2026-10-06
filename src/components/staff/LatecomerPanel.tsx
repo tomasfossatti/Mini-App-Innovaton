@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { assignLatecomerAction, createTeamWithMembersAction, moveParticipantAction } from "@/actions/staff";
 import type { BoardPerson, BoardTeam } from "@/lib/services/teams";
@@ -17,6 +18,7 @@ function LatecomerRow({
   challengeName,
   nameById,
   published,
+  readOnly,
 }: {
   eventId: string;
   person: BoardPerson;
@@ -25,7 +27,9 @@ function LatecomerRow({
   challengeName: (id: string | null) => string;
   nameById: Map<string, string>;
   published: boolean;
+  readOnly: boolean;
 }) {
+  const router = useRouter();
   const { run, pending, error } = useActionRunner();
   const [manual, setManual] = useState("");
   const s = person.suggestion;
@@ -42,7 +46,9 @@ function LatecomerRow({
         pending={pending}
         onClick={() => {
           if (s.exceptional && !confirm(`Quedaría como quinto integrante (excepcional) en ${label}. ¿Confirmás?`)) return;
-          void run(() => assignLatecomerAction(eventId, person.participationId, s.teamId));
+          void run(() => assignLatecomerAction(eventId, person.participationId, s.teamId, s.exceptional)).then((res) => {
+            if (res && !res.ok) router.refresh();
+          });
         }}
       >
         {s.exceptional ? "Sumar como 5º: " : "Sumar a "}
@@ -78,6 +84,7 @@ function LatecomerRow({
           {person.secondChoiceAny ? "Cualquiera" : challengeName(person.secondChoiceId)}
         </span>
       </div>
+      {readOnly ? null : (
       <div className="flex flex-wrap items-center gap-2">
         {suggestion}
         <select
@@ -99,6 +106,7 @@ function LatecomerRow({
           ))}
         </select>
       </div>
+      )}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
     </li>
   );
@@ -111,6 +119,7 @@ export function LatecomerPanel({
   options,
   challenges,
   published,
+  readOnly = false,
 }: {
   eventId: string;
   people: BoardPerson[];
@@ -118,6 +127,7 @@ export function LatecomerPanel({
   options: TeamOption[];
   challenges: { id: string; startupName: string }[];
   published: boolean;
+  readOnly?: boolean;
 }) {
   const names = new Map(challenges.map((c) => [c.id, c.startupName]));
   const challengeName = (id: string | null) => (id ? (names.get(id) ?? "—") : "—");
@@ -134,6 +144,7 @@ export function LatecomerPanel({
           challengeName={challengeName}
           nameById={nameById}
           published={published}
+          readOnly={readOnly}
         />
       ))}
     </ul>

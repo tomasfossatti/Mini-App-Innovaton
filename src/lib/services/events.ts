@@ -92,10 +92,19 @@ export async function setEventPhase(
     await lockEvent(tx, eventId);
     const event = await requireEvent(tx, eventId);
     if (event.phase === phase) return event;
-    if (PRE_PUBLISH_PHASES.includes(phase) && (await hasPublishedTeams(tx, eventId))) {
+    const published = await hasPublishedTeams(tx, eventId);
+    if (PRE_PUBLISH_PHASES.includes(phase) && published) {
       throw new DomainError(
         "TEAMS_PUBLISHED",
         "Los equipos ya se publicaron: no se puede volver a una fase anterior al sprint.",
+      );
+    }
+    // Sin equipos publicados nadie ve su mesa ni puede reflexionar: primero hay que publicar.
+    // Cerrar el evento sí se permite (por ejemplo, si se suspende o se hizo todo en papel).
+    if (!published && (phase === "SPRINT" || phase === "PITCH" || phase === "REFLECTION")) {
+      throw new DomainError(
+        "PUBLISH_FIRST",
+        "Primero publicá los equipos (pestaña Equipos). Sin eso nadie ve su mesa ni puede hacer la reflexión.",
       );
     }
     const [updated] = await tx

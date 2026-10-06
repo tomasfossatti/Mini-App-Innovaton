@@ -7,10 +7,10 @@ import type { Capability, ReflectionAction } from "@/lib/domain/constants";
 import { PRIMARY_CONTRIBUTION_OPTIONS, REFLECTION_ACTION_LABELS } from "@/lib/domain/copy";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
-import { Notice } from "@/components/ui/Notice";
 import { Progress } from "@/components/ui/Progress";
 import { Scale } from "@/components/ui/Scale";
 import { cn } from "@/components/ui/cn";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 interface Draft {
@@ -82,8 +82,20 @@ function useDraft(key: string) {
 export function ReflectionFlow({ eventSlug }: { eventSlug: string }) {
   const router = useRouter();
   const { draft, update, clear } = useDraft(`innovaton-reflection-${eventSlug}`);
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
   const step = draft.step;
+  // Doble toque en una escala: el segundo toque no debe caer en la pantalla siguiente.
+  const [advancing, setAdvancing] = useState(false);
+  const chooseAndAdvance = (patch: Partial<Draft>, nextStepIndex: number) => {
+    if (advancing) return;
+    setAdvancing(true);
+    update(patch);
+    window.setTimeout(() => {
+      update({ step: nextStepIndex });
+      window.scrollTo({ top: 0 });
+      setAdvancing(false);
+    }, 250);
+  };
 
   const go = (n: number) => {
     update({ step: n });
@@ -140,10 +152,8 @@ export function ReflectionFlow({ eventSlug }: { eventSlug: string }) {
             value={draft.postClarity}
             minLabel="Nada claro"
             maxLabel="Muy claro"
-            onChange={(v) => {
-              update({ postClarity: v, step: 1 });
-              window.scrollTo({ top: 0 });
-            }}
+            disabled={advancing}
+            onChange={(v) => chooseAndAdvance({ postClarity: v }, 1)}
           />
         </>
       ) : null}
@@ -238,10 +248,8 @@ export function ReflectionFlow({ eventSlug }: { eventSlug: string }) {
             value={draft.perceivedValue}
             minLabel="Nada"
             maxLabel="Mucho"
-            onChange={(v) => {
-              update({ perceivedValue: v, step: 4 });
-              window.scrollTo({ top: 0 });
-            }}
+            disabled={advancing}
+            onChange={(v) => chooseAndAdvance({ perceivedValue: v }, 4)}
           />
           {back}
         </>
@@ -259,7 +267,7 @@ export function ReflectionFlow({ eventSlug }: { eventSlug: string }) {
             maxLabel="Mucho"
             onChange={(v) => update({ initialModeUsefulness: v })}
           />
-          {error ? <Notice tone="error">{error}</Notice> : null}
+          <ActionError error={error} needsReload={needsReload} />
           <Button
             disabled={draft.initialModeUsefulness == null}
             pending={pending}

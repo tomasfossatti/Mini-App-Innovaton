@@ -22,9 +22,10 @@ import {
 import { normalizeWhatsapp } from "@/lib/domain/phone";
 import { formatTime } from "@/lib/domain/time";
 import { generateToken, sha256 } from "@/lib/auth/crypto";
+import { namesLikelyMatch } from "@/lib/domain/text";
 import { DomainError } from "./errors";
 import { hasPublishedTeams, isUuid, listChallenges, lockEvent, requireEvent } from "./events";
-import { cleanName, upsertParticipantByWhatsapp } from "./participants";
+import { cleanName, upsertParticipantByWhatsapp, findParticipantByWhatsapp } from "./participants";
 
 // Operación del evento para el staff: dashboard, check-in manual, alta rápida y métricas
 // (PRD §14, §15, §27, §31; spec 02 §25; operaciones 03 §2).
@@ -548,10 +549,18 @@ export async function staffQuickAdd(
   return db.transaction(async (tx) => {
     await lockEvent(tx, event.id);
     const choices = await validateStaffChoices(tx, event.id, input);
-    const participant = await upsertParticipantByWhatsapp(tx, {
-      name,
-      whatsappNormalized: phone.e164,
-    });
+
+    // Un número mal tipeado no puede pisar a otra persona: si el WhatsApp ya es de alguien con
+    // otro nombre, se frena y se muestra el nombre guardado.
+    const known = await findParticipantByWhatsapp(tx, phone.e164);
+    if (known && !namesLikelyMatch(known.name, name)) {
+      throw new DomainError(
+        "PHONE_CONFLICT",
+        `Ese WhatsApp ya está registrado a nombre de «${known.name}». Revisá el número; si es la misma persona, buscala en la lista y hacé el check-in.`,
+      );
+    }
+    const participant =
+      known ?? (await upsertParticipantByWhatsapp(tx, { name, whatsappNormalized: phone.e164 }));
 
     const existing = await tx.query.participations.findFirst({
       where: and(
@@ -561,10 +570,12 @@ export async function staffQuickAdd(
     });
 
     if (existing) {
+      // Si se inscribió sola/o, sus elecciones no se tocan: solo se la marca presente.
+      const canUpdateChoices = existing.teamId === null && existing.addedByStaff;
       await tx
         .update(participations)
         .set({
-          ...(existing.teamId ? {} : choices),
+          ...(canUpdateChoices ? choices : {}),
           status: MARK_PRESENT_FROM.includes(existing.status) ? "CHECKED_IN" : existing.status,
           registeredAt: existing.registeredAt ?? now,
           operationalConsentAt: existing.operationalConsentAt ?? now,

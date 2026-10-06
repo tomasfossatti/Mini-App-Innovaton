@@ -5,13 +5,13 @@ import { useState, type FormEvent } from "react";
 import { recoverAction } from "@/actions/participant";
 import { Button } from "@/components/ui/Button";
 import { Field, TextInput } from "@/components/ui/Field";
-import { Notice } from "@/components/ui/Notice";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 export function RecoverForm({ eventSlug }: { eventSlug: string }) {
   const router = useRouter();
   const [whatsapp, setWhatsapp] = useState("");
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -32,7 +32,7 @@ export function RecoverForm({ eventSlug }: { eventSlug: string }) {
           onChange={(e) => setWhatsapp(e.target.value)}
         />
       </Field>
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      <ActionError error={error} needsReload={needsReload} />
       <Button type="submit" pending={pending} pendingLabel="Buscando…">
         RECUPERAR MI LUGAR
       </Button>

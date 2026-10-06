@@ -34,7 +34,8 @@ function avg(value: number | null): string {
 }
 
 export default async function EventDashboardPage(props: PageProps<"/staff/events/[eventId]">) {
-  await requireStaffPage();
+  const staff = await requireStaffPage();
+  const isAdmin = staff.role === "ADMIN";
   const { eventId } = await props.params;
   const db = getDb();
   const event = await getEventById(db, eventId);
@@ -44,6 +45,10 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
     listChallenges(db, event.id, { activeOnly: true }),
   ]);
   const { counts, metrics } = dashboard;
+  // Las cuentas STAFF (founders, facilitación) no ven teléfonos completos.
+  const people = isAdmin
+    ? dashboard.people
+    : dashboard.people.map((p) => ({ ...p, whatsapp: `•••• ${p.whatsapp.slice(-4)}`, waNumber: "" }));
   const reminder = whatsappReminderText(event);
   const tz = event.timezone;
   const exportBase = `/api/staff/events/${event.id}`;
@@ -60,7 +65,11 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
             {formatTime(event.startsAt, tz)}
           </p>
         </div>
-        <PhaseControl eventId={event.id} phase={event.phase} />
+        {isAdmin ? (
+          <PhaseControl key={event.phase} eventId={event.id} phase={event.phase} />
+        ) : (
+          <p className="text-sm text-muted">Las fases, el matching y los respaldos los maneja una cuenta ADMIN.</p>
+        )}
       </Card>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -70,6 +79,7 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
         <StatTile label="Reflexiones" value={counts.reflections} />
       </div>
 
+      {isAdmin ? (
       <Card className="space-y-3">
         <h2 className="text-lg font-bold">Respaldo y contingencia</h2>
         <p className="text-sm text-muted">
@@ -88,6 +98,7 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
           </a>
         </div>
       </Card>
+      ) : null}
 
       <Card className="space-y-3">
         <h2 className="text-lg font-bold">Por desafío</h2>
@@ -131,9 +142,11 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold">Participantes</h2>
-          <span className="text-sm text-muted">Tocá el teléfono para abrir WhatsApp con el recordatorio.</span>
+          {isAdmin ? (
+            <span className="text-sm text-muted">Tocá el teléfono para abrir WhatsApp con el recordatorio.</span>
+          ) : null}
         </div>
-        <PeopleList eventId={event.id} people={dashboard.people} reminder={reminder} />
+        <PeopleList eventId={event.id} people={people} reminder={reminder} maskedPhones={!isAdmin} />
       </Card>
 
       <Card>
@@ -145,11 +158,13 @@ export default async function EventDashboardPage(props: PageProps<"/staff/events
         </details>
       </Card>
 
-      <Card className="space-y-3">
-        <h2 className="text-lg font-bold">Recordatorio por WhatsApp (manual)</h2>
-        <p className="rounded-2xl bg-canvas p-3 text-base">{reminder}</p>
-        <CopyButton text={reminder} label="Copiar mensaje" />
-      </Card>
+      {isAdmin ? (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-bold">Recordatorio por WhatsApp (manual)</h2>
+          <p className="rounded-2xl bg-canvas p-3 text-base">{reminder}</p>
+          <CopyButton text={reminder} label="Copiar mensaje" />
+        </Card>
+      ) : null}
 
       <Card>
         <details>

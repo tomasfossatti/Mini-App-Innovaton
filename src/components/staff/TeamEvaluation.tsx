@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   addObservationAction,
@@ -64,18 +65,33 @@ export function AssessmentForm({
   eventId,
   teamId,
   initial,
+  version,
 }: {
   eventId: string;
   teamId: string;
   initial: { problemScore: number | null; valueScore: number | null; testScore: number | null; feedback: string | null; winner: boolean } | null;
+  /** updatedAt (ISO) de la evaluación guardada, o null si no hay. Evita pisar lo que guardó otra persona. */
+  version: string | null;
 }) {
+  const router = useRouter();
   const [problem, setProblem] = useState(initial?.problemScore ?? null);
   const [value, setValue] = useState(initial?.valueScore ?? null);
   const [test, setTest] = useState(initial?.testScore ?? null);
   const [feedback, setFeedback] = useState(initial?.feedback ?? "");
   const [winner, setWinner] = useState(initial?.winner ?? false);
   const [saved, setSaved] = useState(false);
+  const [syncedVersion, setSyncedVersion] = useState(version);
   const { run, pending, error } = useActionRunner();
+  // Cuando llega una versión nueva del servidor (propia o de otra persona), el formulario se
+  // alinea con lo guardado.
+  if (version !== syncedVersion) {
+    setSyncedVersion(version);
+    setProblem(initial?.problemScore ?? null);
+    setValue(initial?.valueScore ?? null);
+    setTest(initial?.testScore ?? null);
+    setFeedback(initial?.feedback ?? "");
+    setWinner(initial?.winner ?? false);
+  }
 
   return (
     <div className="space-y-4">
@@ -98,15 +114,15 @@ export function AssessmentForm({
         onClick={async () => {
           setSaved(false);
           const res = await run(() =>
-            saveAssessmentAction(eventId, teamId, {
-              problemScore: problem,
-              valueScore: value,
-              testScore: test,
-              feedback: feedback.trim() || null,
-              winner,
-            }),
+            saveAssessmentAction(
+              eventId,
+              teamId,
+              { problemScore: problem, valueScore: value, testScore: test, feedback: feedback.trim() || null, winner },
+              syncedVersion,
+            ),
           );
           if (res?.ok) setSaved(true);
+          else router.refresh();
         }}
       >
         Guardar evaluación
@@ -116,9 +132,16 @@ export function AssessmentForm({
 }
 
 export function A3BlocksForm({ eventId, teamId, initial }: { eventId: string; teamId: string; initial: A3Block[] }) {
+  const router = useRouter();
   const [blocks, setBlocks] = useState<A3Block[]>(initial);
   const [saved, setSaved] = useState(false);
+  const initialKey = initial.join(",");
+  const [synced, setSynced] = useState(initialKey);
   const { run, pending, error } = useActionRunner();
+  if (initialKey !== synced) {
+    setSynced(initialKey);
+    setBlocks(initial);
+  }
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">Marcá los bloques que quedaron completos en el A3 (lo decide una persona, no hay análisis automático).</p>
@@ -148,8 +171,9 @@ export function A3BlocksForm({ eventId, teamId, initial }: { eventId: string; te
           variant="secondary"
           pending={pending}
           onClick={async () => {
-            const res = await run(() => saveA3BlocksAction(eventId, teamId, blocks));
+            const res = await run(() => saveA3BlocksAction(eventId, teamId, blocks, synced ? synced.split(",") : []));
             if (res?.ok) setSaved(true);
+            else router.refresh();
           }}
         >
           Guardar bloques

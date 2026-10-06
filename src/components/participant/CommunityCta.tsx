@@ -4,7 +4,7 @@ import { useState } from "react";
 import { communityCtaAction } from "@/actions/participant";
 import { IDI_CTA } from "@/lib/domain/copy";
 import { Button } from "@/components/ui/Button";
-import { Notice } from "@/components/ui/Notice";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 export function CommunityCta({
@@ -17,7 +17,7 @@ export function CommunityCta({
   communityUrl: string | null;
 }) {
   const [done, setDone] = useState(initialDone);
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
   return (
     <section className="space-y-4 rounded-3xl bg-brand p-6 text-white">
       <p className="text-lg leading-snug">{IDI_CTA.body1}</p>
@@ -51,7 +51,7 @@ export function CommunityCta({
           {IDI_CTA.button}
         </Button>
       )}
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      <ActionError error={error} needsReload={needsReload} />
     </section>
   );
 }

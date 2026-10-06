@@ -8,6 +8,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Spinner } from "@/components/ui/Spinner";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 export interface StatusEventInfo {
@@ -20,9 +21,18 @@ export interface StatusEventInfo {
   icsUrl: string;
 }
 
+/** PRD §13: "Volvé al stand de Espacio IDI…" con el lugar por defecto. */
+function standLabel(location: string): string {
+  return location.trim().toLowerCase() === "stand espacio idi" ? "stand de Espacio IDI" : location;
+}
+
 /** Cada cuánto consultar según el estado (02 §11: 5–10 s solo mientras espera equipo). */
+const FINISHED_PHASES = ["REFLECTION", "CLOSED"];
+
 function pollInterval(s: ParticipantState): number | null {
   if (s.hasOutcome || s.canReflect) return null;
+  // Sin equipo cuando la experiencia ya terminó: no hay nada más que esperar.
+  if (!s.team && FINISHED_PHASES.includes(s.eventPhase)) return null;
   if (s.team) {
     return s.eventPhase === "REFLECTION" || s.eventPhase === "CLOSED" ? null : 15_000;
   }
@@ -197,14 +207,26 @@ export function StatusView({
         <Button pending={checkin.pending} pendingLabel="Confirmando…" onClick={() => void doCheckIn()}>
           ESTOY ACÁ
         </Button>
-        {checkin.error ? <Notice tone="error">{checkin.error}</Notice> : null}
+        <ActionError error={checkin.error} needsReload={checkin.needsReload} />
         {missionBlock}
       </div>
     );
   }
 
-  // 4. Presente, esperando equipo.
-  if (state.checkedIn) {
+  // 4. La experiencia terminó y esta persona no quedó en un equipo.
+  if (!state.team && FINISHED_PHASES.includes(state.eventPhase)) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-extrabold">El Innovatón ya terminó</h1>
+        <p className="text-lg">
+          Si participaste en un equipo y no ves tu reflexión, acercate al stand de Espacio IDI y el staff lo resuelve.
+        </p>
+      </div>
+    );
+  }
+
+  // 5. Presente, esperando equipo.
+  if (state.checkedIn && (state.eventPhase === "CHECKIN" || state.eventPhase === "MATCHING")) {
     return (
       <div className="space-y-5">
         <h1 className="text-3xl font-extrabold">Listo. Estás adentro.</h1>
@@ -213,16 +235,25 @@ export function StatusView({
           <Spinner className="text-brand" />
           Esperando la publicación de equipos…
         </div>
-        {state.eventPhase === "SPRINT" || state.eventPhase === "PITCH" ? (
-          <Notice tone="info">Los equipos ya salieron. Acercate al stand: el staff te suma a un equipo.</Notice>
-        ) : null}
         {missionBlock}
         {refreshLink}
       </div>
     );
   }
 
-  // 5. Llegó tarde o no hizo check-in a tiempo.
+  // 6. Presente sin equipo con los equipos ya publicados: lo resuelve el staff.
+  if (state.checkedIn) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-extrabold">Estás adentro. Acercate al stand</h1>
+        <p className="text-lg">Los equipos ya salieron: el staff te suma a uno. Esta pantalla se actualiza sola.</p>
+        {missionBlock}
+        {refreshLink}
+      </div>
+    );
+  }
+
+  // 7. Llegó tarde o no hizo check-in a tiempo.
   if (["MATCHING", "SPRINT", "PITCH", "REFLECTION", "CLOSED"].includes(state.eventPhase)) {
     return (
       <div className="space-y-5">
@@ -236,13 +267,13 @@ export function StatusView({
     );
   }
 
-  // 6. Preinscripto (PRD §13).
+  // 8. Preinscripto (PRD §13).
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-extrabold">Estás preinscripto.</h1>
       <div className="space-y-1 text-lg">
         <p>
-          Volvé al {info.location} entre {info.checkinTime} y {info.closeTime}.
+          Volvé al {standLabel(info.location)} entre {info.checkinTime} y {info.closeTime}.
         </p>
         <p className="font-semibold">A las {info.startTime} empezamos.</p>
         <p className="text-base text-muted">{info.dateLabel}</p>

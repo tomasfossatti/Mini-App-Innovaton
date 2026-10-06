@@ -113,6 +113,7 @@ export default async function TeamDetailPage(props: PageProps<"/staff/events/[ev
           <p className="text-sm text-muted">Sin evaluación todavía. Se puede cargar más tarde.</p>
         )}
         <AssessmentForm
+          version={assessment ? assessment.updatedAt.toISOString() : null}
           eventId={event.id}
           teamId={team.id}
           initial={

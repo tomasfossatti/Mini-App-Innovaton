@@ -287,6 +287,7 @@ export async function saveFounderAssessment(
   teamId: string,
   input: FounderAssessmentInput,
   staffId: string | null,
+  opts: { expectedUpdatedAt?: string | null } = {},
 ): Promise<FounderAssessmentRow> {
   if (!isScoreOrNull(input.problemScore) || !isScoreOrNull(input.valueScore) || !isScoreOrNull(input.testScore)) {
     throw new DomainError("INVALID_SCORE", "Los puntajes van del 1 al 5 (o sin puntaje).");
@@ -309,6 +310,20 @@ export async function saveFounderAssessment(
     await lockEvent(tx, eventId);
     await requireTeam(tx, eventId, teamId);
     await lockTeamEvidence(tx, teamId);
+    if (opts.expectedUpdatedAt !== undefined) {
+      // El formulario manda la versión que vio: si otra persona guardó en el medio, no se pisa.
+      const current = await tx.query.founderAssessments.findFirst({
+        where: eq(founderAssessments.teamId, teamId),
+        columns: { updatedAt: true },
+      });
+      const currentVersion = current ? current.updatedAt.toISOString() : null;
+      if (currentVersion !== opts.expectedUpdatedAt) {
+        throw new DomainError(
+          "STALE_ASSESSMENT",
+          "Otra persona guardó una evaluación para este equipo hace un momento. Recargá para verla antes de cambiarla.",
+        );
+      }
+    }
     const [row] = await tx
       .insert(founderAssessments)
       .values({ teamId, ...values })
@@ -335,6 +350,7 @@ export async function saveA3Blocks(
   eventId: string,
   teamId: string,
   blocks: A3Block[],
+  opts: { expectedBlocks?: A3Block[] } = {},
 ): Promise<void> {
   // Una entrada que no es lista no puede leerse como "ningún bloque": borraría la marca guardada.
   if (!Array.isArray(blocks) || blocks.some((b) => !A3_BLOCKS.includes(b))) {
@@ -344,8 +360,18 @@ export async function saveA3Blocks(
 
   await db.transaction(async (tx) => {
     await lockEvent(tx, eventId);
-    await requireTeam(tx, eventId, teamId);
+    const team = await requireTeam(tx, eventId, teamId);
     await lockTeamEvidence(tx, teamId);
+    if (opts.expectedBlocks !== undefined) {
+      const seen = A3_BLOCKS.filter((b) => opts.expectedBlocks?.includes(b)).join(",");
+      const current = A3_BLOCKS.filter((b) => team.a3Blocks.includes(b)).join(",");
+      if (seen !== current && current !== clean.join(",")) {
+        throw new DomainError(
+          "STALE_A3",
+          "Otra persona marcó los bloques del A3 hace un momento. Recargá para verlos antes de cambiarlos.",
+        );
+      }
+    }
     await tx.update(teams).set({ a3Blocks: clean }).where(eq(teams.id, teamId));
     const changed = await replaceTeamEvidence(tx, eventId, teamId, `a3:${teamId}`, evidenceFromA3Blocks(clean));
     if (changed) await reinterpretTeam(tx, teamId);

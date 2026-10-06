@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireStaffPage } from "@/lib/auth/staff";
 import { getDb } from "@/lib/db/client";
 import { getEventById } from "@/lib/services/events";
-import { getTeamsBoard } from "@/lib/services/teams";
+import { boardVersion, getTeamsBoard } from "@/lib/services/teams";
 import { AutoRefresh } from "@/components/staff/AutoRefresh";
 import { LatecomerPanel } from "@/components/staff/LatecomerPanel";
 import { NewTeamButton } from "@/components/staff/NewTeamButton";
@@ -17,7 +17,8 @@ import { cn } from "@/components/ui/cn";
 export const metadata: Metadata = { title: "Equipos" };
 
 export default async function TeamsPage(props: PageProps<"/staff/events/[eventId]/teams">) {
-  await requireStaffPage();
+  const staff = await requireStaffPage();
+  const isAdmin = staff.role === "ADMIN";
   const { eventId } = await props.params;
   const sp = await props.searchParams;
   const filter = typeof sp.challenge === "string" ? sp.challenge : null;
@@ -30,6 +31,9 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
     id: t.id,
     label: `Mesa ${t.tableNumber} · ${t.startupName} Eq. ${t.teamNumber} (${t.members.length})`,
   }));
+  const tableOwners = Object.fromEntries(
+    board.teams.map((t) => [t.tableNumber, { teamId: t.id, label: `${t.startupName} Eq. ${t.teamNumber}` }]),
+  );
   const presentCount = board.teams.reduce((n, t) => n + t.members.length, 0) + board.unassigned.length;
   const visibleChallenges = board.challenges.filter(
     (c) => (!filter || c.id === filter) && (c.active || board.teams.some((t) => t.challengeId === c.id)),
@@ -39,6 +43,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
   return (
     <div className="space-y-5">
       <AutoRefresh seconds={10} />
+      {isAdmin ? (
       <TeamsToolbar
         eventId={event.id}
         phase={board.phase}
@@ -46,7 +51,15 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
         teamCount={board.teams.length}
         presentCount={presentCount}
         unassignedCount={board.unassigned.length}
+        version={boardVersion(board)}
       />
+      ) : (
+        <Notice tone="info">
+          {board.published
+            ? "Equipos publicados. Abrí tu equipo para cargar el A3 y la evaluación."
+            : "Los equipos todavía no se publicaron. Los arma y publica una cuenta ADMIN."}
+        </Notice>
+      )}
 
       {board.warnings.length ? (
         <Notice tone="warn" title="Revisar">
@@ -69,6 +82,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
               : "Quedaron sin equipo en el matching. Asignalos a mano o creá un equipo."}
           </p>
           <LatecomerPanel
+            readOnly={!isAdmin}
             eventId={event.id}
             people={board.unassigned}
             teams={board.teams}
@@ -117,12 +131,12 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
               <h2 className="text-lg font-bold">
                 {c.startupName} <span className="font-normal text-muted">· {teams.length} equipo{teams.length === 1 ? "" : "s"}</span>
               </h2>
-              <NewTeamButton eventId={event.id} challengeId={c.id} startupName={c.startupName} />
+              {isAdmin ? <NewTeamButton eventId={event.id} challengeId={c.id} startupName={c.startupName} /> : null}
             </div>
             {teams.length ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {teams.map((t) => (
-                  <TeamCard key={`${t.id}-${t.tableNumber}`} eventId={event.id} team={t} options={options} />
+                  <TeamCard key={`${t.id}-${t.tableNumber}`} eventId={event.id} team={t} options={options} readOnly={!isAdmin} tableOwners={tableOwners} />
                 ))}
               </div>
             ) : (

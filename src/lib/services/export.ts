@@ -21,6 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { MODE_LABELS } from "@/lib/domain/copy";
 import { toCsv, type CsvCell } from "@/lib/domain/csv";
+import { normalizeWhatsapp } from "@/lib/domain/phone";
 import { formatIsoDate, formatTime } from "@/lib/domain/time";
 import { requireEvent } from "./events";
 import { ANY_CHOICE_LABEL } from "./operations";
@@ -123,9 +124,18 @@ function choiceNames(
   return { first, second };
 }
 
+/**
+ * WhatsApp legible y sin "+" inicial: Excel no lo convierte en número (5,49E+12) ni en fórmula.
+ */
+function csvPhone(e164: string): string {
+  const parsed = normalizeWhatsapp(e164);
+  return (parsed.ok ? parsed.display : e164).replace(/^\+/, "");
+}
+
 export const PARTICIPANTS_CSV_HEADER = [
   "nombre",
   "whatsapp",
+  "whatsapp_link",
   "estado",
   "modo_inicial",
   "primera_opcion",
@@ -168,7 +178,8 @@ export async function exportParticipantsCsv(
     [...PARTICIPANTS_CSV_HEADER],
     ...rows.map(({ p, first, second, team }) => [
       p.name,
-      p.whatsapp,
+      csvPhone(p.whatsapp),
+      `https://wa.me/${p.whatsapp.replace(/\D/g, "")}`,
       p.status,
       p.initialMode ? MODE_LABELS[p.initialMode] : "",
       first,
@@ -187,7 +198,8 @@ export async function exportParticipantsCsv(
 
   return {
     filename: `innovaton-${event.slug}-${fileStamp(now, tz)}.csv`,
-    csv: toCsv(table),
+    // ";" es el separador que espera Excel en español; Google Sheets lo detecta solo.
+    csv: toCsv(table, { separator: ";" }),
   };
 }
 

@@ -182,36 +182,65 @@ describe("flujo del participante", () => {
     expect(res.participation.communityConsentAt).not.toBeNull();
   });
 
-  it("misma persona desde otro dispositivo: reutiliza la inscripción y no pierde el check-in", async () => {
+  it("WhatsApp ya inscripto en el evento: rechaza sin tocar la inscripción existente", async () => {
     const { event, challenges } = await setup();
     const first = await readyToRegister(event, challenges[0].id, challenges[1].id);
     await registerParticipant(db, event, await reload(first.id), {
       name: "Caro",
       whatsapp: "351 15 222 3333",
       operationalConsent: true,
-      communityConsent: false,
+      communityConsent: true,
     });
     const ev = await setPhase(event.id, "CHECKIN");
     await checkIn(db, ev, await reload(first.id));
+    const before = await reload(first.id);
 
+    // Otro dispositivo (o alguien que conoce el número) intenta inscribirse con el mismo WhatsApp.
     const second = await readyToRegister(ev, challenges[2].id, null);
-    const res = await registerParticipant(db, ev, await reload(second.id), {
-      name: "Carolina",
-      whatsapp: "+5493512223333",
-      operationalConsent: true,
-      communityConsent: true,
+    await expect(
+      registerParticipant(db, ev, await reload(second.id), {
+        name: "Otra Persona",
+        whatsapp: "+5493512223333",
+        operationalConsent: true,
+        communityConsent: false,
+      }),
+    ).rejects.toMatchObject({ code: "ALREADY_REGISTERED" });
+
+    const after = await reload(first.id);
+    expect(after).toMatchObject({
+      status: "CHECKED_IN",
+      firstChoiceId: before.firstChoiceId,
+      secondChoiceId: before.secondChoiceId,
+      resumeTokenHash: before.resumeTokenHash,
     });
-    expect(res.merged).toBe(true);
-    expect(res.participation.id).toBe(first.id);
-    expect(res.participation.status).toBe("CHECKED_IN");
-    expect(res.participation.firstChoiceId).toBe(challenges[2].id);
-    expect(await db.select().from(s.participations)).toHaveLength(1);
-    // El token del segundo dispositivo ahora apunta a la inscripción original.
-    expect((await getParticipationByToken(db, ev.id, second.token))?.id).toBe(first.id);
-    expect(await getParticipationByToken(db, ev.id, first.token)).toBeNull();
-    const answers = await db.select().from(s.questionnaireAnswers);
-    expect(answers.every((a) => a.participationId === first.id)).toBe(true);
-    expect((await db.query.participants.findFirst())?.name).toBe("Carolina");
+    expect(after.communityConsentAt).not.toBeNull();
+    expect((await db.query.participants.findFirst())?.name).toBe("Caro");
+    expect((await reload(second.id)).status).toBe("PROFILE_COMPLETED");
+    // La salida legítima es recuperar el lugar.
+    const rec = await recoverParticipation(db, ev, "351 15 222 3333");
+    expect(rec.participation.id).toBe(first.id);
+  });
+
+  it("la misma persona en otro evento reutiliza su identidad", async () => {
+    const { event, challenges } = await setup();
+    const a = await readyToRegister(event, challenges[0].id, null);
+    await registerParticipant(db, event, await reload(a.id), {
+      name: "Dani",
+      whatsapp: "351 444 1111",
+      operationalConsent: true,
+      communityConsent: false,
+    });
+    const other = await makeEvent(db);
+    const otherChallenges = await makeChallenges(db, other.id, 2);
+    const b = await readyToRegister(other, otherChallenges[0].id, otherChallenges[1].id);
+    const res = await registerParticipant(db, other, await reload(b.id), {
+      name: "Daniela",
+      whatsapp: "+5493514441111",
+      operationalConsent: true,
+      communityConsent: false,
+    });
+    expect(res.participation.status).toBe("REGISTERED");
+    expect(await db.select().from(s.participants)).toHaveLength(1);
   });
 
   it("inscripción cerrada y llegada tarde", async () => {

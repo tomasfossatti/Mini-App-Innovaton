@@ -39,20 +39,29 @@ export async function saveAssessmentAction(
   eventId: string,
   teamId: string,
   input: z.input<typeof AssessmentSchema>,
+  expectedUpdatedAt: string | null,
 ) {
   return founderOp(eventId, async (staffId) => {
     const data = AssessmentSchema.parse(input);
-    await saveFounderAssessment(getDb(), eventId, id.parse(teamId), {
-      ...data,
-      feedback: data.feedback?.trim() || null,
-    }, staffId);
+    await saveFounderAssessment(
+      getDb(),
+      eventId,
+      id.parse(teamId),
+      { ...data, feedback: data.feedback?.trim() || null },
+      staffId,
+      { expectedUpdatedAt: z.string().max(40).nullable().parse(expectedUpdatedAt) },
+    );
     return null;
   });
 }
 
-export async function saveA3BlocksAction(eventId: string, teamId: string, blocks: string[]) {
+const blocksSchema = z.array(z.enum(A3_BLOCKS));
+
+export async function saveA3BlocksAction(eventId: string, teamId: string, blocks: string[], expectedBlocks: string[]) {
   return founderOp(eventId, async () => {
-    await saveA3Blocks(getDb(), eventId, id.parse(teamId), z.array(z.enum(A3_BLOCKS)).parse(blocks));
+    await saveA3Blocks(getDb(), eventId, id.parse(teamId), blocksSchema.parse(blocks), {
+      expectedBlocks: blocksSchema.parse(expectedBlocks),
+    });
     return null;
   });
 }

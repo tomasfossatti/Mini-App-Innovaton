@@ -710,7 +710,7 @@ describe("staffQuickAdd", () => {
     expect(await db.select().from(s.participants)).toHaveLength(1);
   });
 
-  it("reutiliza la inscripción previa de la persona y la marca presente", async () => {
+  it("reutiliza la inscripción previa de la persona, la marca presente y no cambia lo que eligió", async () => {
     const { event, challenges: [a, b, c] } = await setup();
     const { participation, participant } = await makeRegistered(db, event.id, {
       name: "Lucía",
@@ -732,10 +732,11 @@ describe("staffQuickAdd", () => {
       checkedInAt: NOW,
       addedByStaff: false,
       initialMode: "EXPLORE",
-      firstChoiceId: c.id,
-      secondChoiceId: a.id,
+      firstChoiceId: a.id,
+      secondChoiceId: b.id,
     });
     expect(row.registeredAt).toEqual(participation.registeredAt);
+    void c;
   });
 
   it("si ya tiene equipo no cambia elecciones ni estado", async () => {
@@ -752,7 +753,7 @@ describe("staffQuickAdd", () => {
     const result = await staffQuickAdd(
       db,
       event,
-      { name: "Otro Nombre", whatsapp: participant.whatsappNormalized, firstChoiceId: c.id, secondChoiceId: null, secondChoiceAny: true },
+      { name: participant.name, whatsapp: participant.whatsappNormalized, firstChoiceId: c.id, secondChoiceId: null, secondChoiceAny: true },
       new Date(),
     );
     expect(result).toEqual({ participationId: participation.id, created: false });
@@ -791,6 +792,44 @@ describe("staffQuickAdd", () => {
     expect(await db.select().from(s.evidenceItems)).toHaveLength(0);
   });
 
+  it("WhatsApp mal tipeado de otra persona: frena sin renombrar ni marcar presente a nadie", async () => {
+    const { event, challenges: [a, b] } = await setup();
+    const { participation, participant } = await makeRegistered(db, event.id, {
+      name: "María Pérez",
+      firstChoiceId: a.id,
+      secondChoiceId: b.id,
+    });
+    await expect(
+      staffQuickAdd(
+        db,
+        event,
+        { name: "Juan", whatsapp: participant.whatsappNormalized, firstChoiceId: b.id, secondChoiceId: null, secondChoiceAny: true },
+        NOW,
+      ),
+    ).rejects.toMatchObject({ code: "PHONE_CONFLICT" });
+    expect(await reload(participation.id)).toMatchObject({ status: "REGISTERED", firstChoiceId: a.id, checkedInAt: null });
+    const person = await db.query.participants.findFirst({ where: eq(s.participants.id, participant.id) });
+    expect(person?.name).toBe("María Pérez");
+  });
+
+  it("alta de staff previa sin equipo: sí puede corregir sus elecciones", async () => {
+    const { event, challenges: [a, b] } = await setup();
+    const first = await staffQuickAdd(
+      db,
+      event,
+      { name: "Nico", whatsapp: "351 333 4444", firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true },
+      NOW,
+    );
+    const again = await staffQuickAdd(
+      db,
+      event,
+      { name: "nico", whatsapp: "+5493513334444", firstChoiceId: b.id, secondChoiceId: a.id, secondChoiceAny: false },
+      NOW,
+    );
+    expect(again).toEqual({ participationId: first.participationId, created: false });
+    expect(await reload(first.participationId)).toMatchObject({ firstChoiceId: b.id, secondChoiceId: a.id });
+  });
+
   it("la misma persona inscripta en otro evento: crea una participation nueva en este", async () => {
     const { event, challenges: [a] } = await setup();
     const other = await makeEvent(db);
@@ -800,7 +839,7 @@ describe("staffQuickAdd", () => {
     const result = await staffQuickAdd(
       db,
       event,
-      { name: "Repite", whatsapp: previous.participant.whatsappNormalized, firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true },
+      { name: previous.participant.name, whatsapp: previous.participant.whatsappNormalized, firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true },
       NOW,
     );
     expect(result.created).toBe(true);

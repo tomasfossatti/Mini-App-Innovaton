@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { registerAction } from "@/actions/participant";
 import { Button } from "@/components/ui/Button";
 import { Field, TextInput } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 function Check({
@@ -39,7 +41,7 @@ export function RegisterForm({ eventSlug, late }: { eventSlug: string; late: boo
   const [whatsapp, setWhatsapp] = useState("");
   const [operational, setOperational] = useState(false);
   const [community, setCommunity] = useState(false);
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -93,7 +95,7 @@ export function RegisterForm({ eventSlug, late }: { eventSlug: string; late: boo
           La inscripción para el matching ya cerró. Te anotamos igual y el staff del stand te suma si es posible.
         </Notice>
       ) : null}
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      <ActionError error={error} needsReload={needsReload} />
       <Button type="submit" pending={pending} pendingLabel="Inscribiendo…" disabled={!operational}>
         INSCRIBIRME
       </Button>
@@ -102,6 +104,12 @@ export function RegisterForm({ eventSlug, late }: { eventSlug: string; late: boo
           Para participar necesitamos poder escribirte por WhatsApp sobre este Innovatón.
         </p>
       ) : null}
+      <Link
+        href={`/e/${eventSlug}/recover`}
+        className="block min-h-11 content-center text-center text-sm font-semibold text-brand underline underline-offset-4"
+      >
+        ¿Ya te inscribiste desde otro celular? Recuperá tu lugar
+      </Link>
     </form>
   );
 }

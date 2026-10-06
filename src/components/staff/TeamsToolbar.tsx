@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { generateTeamsAction, publishTeamsAction, setPhaseAction } from "@/actions/staff";
 import type { EventPhase } from "@/lib/domain/constants";
@@ -20,6 +21,7 @@ export function TeamsToolbar({
   teamCount,
   presentCount,
   unassignedCount,
+  version,
 }: {
   eventId: string;
   phase: EventPhase;
@@ -27,7 +29,10 @@ export function TeamsToolbar({
   teamCount: number;
   presentCount: number;
   unassignedCount: number;
+  /** Versión del tablero que se está viendo: si otra persona lo cambió, el servidor rechaza. */
+  version: string;
 }) {
+  const router = useRouter();
   const gen = useActionRunner();
   const pub = useActionRunner();
   const close = useActionRunner();
@@ -76,8 +81,9 @@ export function TeamsToolbar({
           pendingLabel="Generando…"
           onClick={async () => {
             if (teamCount > 0 && !confirm("¿Regenerar? Se descartan los equipos borrador y sus cambios manuales.")) return;
-            const res = await gen.run(() => generateTeamsAction(eventId));
+            const res = await gen.run(() => generateTeamsAction(eventId, version));
             if (res?.ok) setSummary(res.data);
+            else router.refresh();
           }}
         >
           {teamCount > 0 ? "Regenerar equipos" : `Generar equipos (${presentCount} presentes)`}
@@ -90,7 +96,9 @@ export function TeamsToolbar({
             onClick={() => {
               const warn = unassignedCount > 0 ? `\n\nHay ${unassignedCount} presentes sin equipo.` : "";
               if (confirm(`¿Publicar los equipos? Después no se puede regenerar.${warn}`)) {
-                void pub.run(() => publishTeamsAction(eventId));
+                void pub.run(() => publishTeamsAction(eventId, version)).then((res) => {
+                  if (res && !res.ok) router.refresh();
+                });
               }
             }}
           >

@@ -34,39 +34,57 @@ export function A3Uploader({ teamId }: { teamId: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<"idle" | "working" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Si la subida falla, la foto comprimida queda en memoria para reintentar sin volver a sacarla.
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
 
-  async function onFile(file: File | undefined) {
-    if (!file) return;
+  async function upload(blob: Blob) {
     setError(null);
     setState("working");
     try {
-      const blob = await compress(file);
       if (blob.size > MAX_BYTES) throw new Error("La foto pesa más de 4 MB incluso comprimida.");
       const body = new FormData();
       body.append("file", blob, "a3.jpg");
-      const res = await fetch(`/api/staff/teams/${teamId}/artifacts`, { method: "POST", body });
+      const res = await fetch(`/api/staff/teams/${teamId}/artifacts`, {
+        method: "POST",
+        body,
+        signal: AbortSignal.timeout(45_000),
+      });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "No se pudo subir la foto.");
+      setPendingBlob(null);
       setState("done");
       router.refresh();
     } catch (err) {
+      setPendingBlob(blob);
       setState("idle");
-      setError(err instanceof Error ? err.message : "No se pudo subir la foto. Probá de nuevo.");
-    } finally {
-      if (input.current) input.current.value = "";
+      const timedOut = err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError");
+      setError(
+        timedOut
+          ? "La subida tardó demasiado (señal débil). La foto quedó guardada acá: reintentá en un rato."
+          : err instanceof Error
+            ? err.message
+            : "No se pudo subir la foto. Probá de nuevo.",
+      );
     }
+  }
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setState("working");
+    const blob = await compress(file);
+    if (input.current) input.current.value = "";
+    await upload(blob);
   }
 
   return (
     <div className="space-y-2">
       <label className="inline-flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-brand px-6 text-lg font-semibold text-white sm:w-auto">
         {state === "working" ? <Spinner /> : null}
-        {state === "working" ? "Subiendo foto…" : "Sacar / subir foto del A3"}
+        {state === "working" ? "Subiendo foto…" : "Sacar o elegir foto del A3"}
         <input
           ref={input}
           type="file"
           accept="image/*"
-          capture="environment"
           className="sr-only"
           disabled={state === "working"}
           onChange={(e) => void onFile(e.target.files?.[0])}
@@ -74,6 +92,15 @@ export function A3Uploader({ teamId }: { teamId: string }) {
       </label>
       {state === "done" ? <p className="text-sm font-semibold text-ok">Foto guardada.</p> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {pendingBlob && state !== "working" ? (
+        <button
+          type="button"
+          onClick={() => void upload(pendingBlob)}
+          className="min-h-12 rounded-2xl border-2 border-line bg-paper px-5 font-semibold"
+        >
+          Reintentar subida
+        </button>
+      ) : null}
     </div>
   );
 }

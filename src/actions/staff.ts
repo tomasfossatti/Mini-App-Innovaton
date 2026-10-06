@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
 import { requireStaffAction } from "@/lib/auth/staff";
-import { EVENT_PHASES } from "@/lib/domain/constants";
+import { EVENT_PHASES, type StaffRole } from "@/lib/domain/constants";
 import { requireEvent, setEventPhase } from "@/lib/services/events";
 import { manualCheckIn, staffQuickAdd, undoCheckIn } from "@/lib/services/operations";
 import {
@@ -25,10 +25,13 @@ function revalidateEvent(eventId: string) {
   revalidatePath(`/staff/events/${eventId}`, "layout");
 }
 
-/** Wrapper común: sesión de staff + validación de ids + revalidación de las pantallas del evento. */
-async function staffOp<T>(eventId: string, fn: () => Promise<T>): Promise<ActionResult<T>> {
+/**
+ * Wrapper común: sesión + rol + validación de ids + revalidación de las pantallas del evento.
+ * STAFF (founders, facilitación, check-in) solo hace check-in y alta rápida; el resto es ADMIN.
+ */
+async function staffOp<T>(eventId: string, fn: () => Promise<T>, role: StaffRole = "ADMIN"): Promise<ActionResult<T>> {
   return runAction(async () => {
-    await requireStaffAction();
+    await requireStaffAction(role);
     id.parse(eventId);
     const result = await fn();
     revalidateEvent(eventId);
@@ -44,14 +47,18 @@ export async function setPhaseAction(eventId: string, phase: string) {
 }
 
 export async function manualCheckInAction(eventId: string, participationId: string) {
-  return staffOp(eventId, () => manualCheckIn(getDb(), eventId, id.parse(participationId)));
+  return staffOp(eventId, () => manualCheckIn(getDb(), eventId, id.parse(participationId)), "STAFF");
 }
 
 export async function undoCheckInAction(eventId: string, participationId: string) {
-  return staffOp(eventId, async () => {
-    await undoCheckIn(getDb(), eventId, id.parse(participationId));
-    return null;
-  });
+  return staffOp(
+    eventId,
+    async () => {
+      await undoCheckIn(getDb(), eventId, id.parse(participationId));
+      return null;
+    },
+    "STAFF",
+  );
 }
 
 const QuickAddSchema = z.object({
@@ -66,19 +73,29 @@ export async function quickAddAction(
   eventId: string,
   input: z.input<typeof QuickAddSchema>,
 ) {
-  return staffOp(eventId, async () => {
-    const db = getDb();
-    const event = await requireEvent(db, eventId);
-    return staffQuickAdd(db, event, QuickAddSchema.parse(input));
-  });
+  return staffOp(
+    eventId,
+    async () => {
+      const db = getDb();
+      const event = await requireEvent(db, eventId);
+      return staffQuickAdd(db, event, QuickAddSchema.parse(input));
+    },
+    "STAFF",
+  );
 }
 
-export async function generateTeamsAction(eventId: string) {
-  return staffOp(eventId, () => generateTeams(getDb(), eventId));
+const version = z.string().max(64).optional();
+
+export async function generateTeamsAction(eventId: string, expectedVersion?: string) {
+  return staffOp(eventId, () =>
+    generateTeams(getDb(), eventId, { expectedVersion: version.parse(expectedVersion) }),
+  );
 }
 
-export async function publishTeamsAction(eventId: string) {
-  return staffOp(eventId, () => publishTeams(getDb(), eventId));
+export async function publishTeamsAction(eventId: string, expectedVersion?: string) {
+  return staffOp(eventId, () =>
+    publishTeams(getDb(), eventId, new Date(), { expectedVersion: version.parse(expectedVersion) }),
+  );
 }
 
 export async function moveParticipantAction(eventId: string, participationId: string, teamId: string | null) {
@@ -88,9 +105,16 @@ export async function moveParticipantAction(eventId: string, participationId: st
   });
 }
 
-export async function assignLatecomerAction(eventId: string, participationId: string, teamId: string) {
+export async function assignLatecomerAction(
+  eventId: string,
+  participationId: string,
+  teamId: string,
+  allowFifth: boolean,
+) {
   return staffOp(eventId, async () => {
-    await assignLatecomer(getDb(), eventId, id.parse(participationId), id.parse(teamId));
+    await assignLatecomer(getDb(), eventId, id.parse(participationId), id.parse(teamId), {
+      allowFifth: z.boolean().parse(allowFifth),
+    });
     return null;
   });
 }

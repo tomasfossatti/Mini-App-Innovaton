@@ -13,7 +13,9 @@ export function EventTabs({ eventId, isAdmin }: { eventId: string; isAdmin: bool
     ...(isAdmin
       ? [{ href: `${base}/settings`, label: "Configuración", match: (p: string) => p.startsWith(`${base}/settings`) }]
       : []),
-    { href: `${base}/print`, label: "Imprimir", match: (p: string) => p.startsWith(`${base}/print`) },
+    isAdmin
+      ? { href: `${base}/print`, label: "Imprimir", match: (p: string) => p.startsWith(`${base}/print`) }
+      : { href: `${base}/print/kit`, label: "Kit en papel", match: (p: string) => p.startsWith(`${base}/print`) },
   ];
   return (
     <nav className="no-print -mx-4 overflow-x-auto px-4">

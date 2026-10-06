@@ -21,11 +21,15 @@ function MemberRow({
   member,
   teamId,
   options,
+  readOnly,
+  published,
 }: {
   eventId: string;
   member: BoardTeam["members"][number];
   teamId: string;
   options: TeamOption[];
+  readOnly: boolean;
+  published: boolean;
 }) {
   const { run, pending, error } = useActionRunner();
   return (
@@ -35,6 +39,7 @@ function MemberRow({
         {member.initialMode ? <Badge>{MODE_SHORT[member.initialMode]}</Badge> : <Badge>sin modo</Badge>}
         {member.assignmentSource ? <Badge tone="neutral">{SOURCE_LABELS[member.assignmentSource]}</Badge> : null}
       </div>
+      {readOnly ? null : (
       <label className="mt-1 flex min-w-0 items-center gap-2 text-sm">
         <span className="shrink-0 text-muted">Mover a</span>
         <select
@@ -43,6 +48,12 @@ function MemberRow({
           disabled={pending}
           onChange={(e) => {
             const target = e.target.value;
+            const label = target === "NONE" ? "sin equipo" : (options.find((o) => o.id === target)?.label ?? "otro equipo");
+            // Con equipos publicados la persona ve el cambio en su celular: se confirma.
+            if (published && !confirm(`¿Mover a ${member.name} a ${label}? Lo va a ver en su celular.`)) {
+              e.target.value = teamId;
+              return;
+            }
             void run(() => moveParticipantAction(eventId, member.participationId, target === "NONE" ? null : target));
           }}
         >
@@ -54,12 +65,26 @@ function MemberRow({
           <option value="NONE">Sin equipo</option>
         </select>
       </label>
+      )}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
     </li>
   );
 }
 
-export function TeamCard({ eventId, team, options }: { eventId: string; team: BoardTeam; options: TeamOption[] }) {
+export function TeamCard({
+  eventId,
+  team,
+  options,
+  readOnly = false,
+  tableOwners = {},
+}: {
+  eventId: string;
+  team: BoardTeam;
+  options: TeamOption[];
+  readOnly?: boolean;
+  /** Mesa → "Startup Eq. N", para avisar antes de intercambiar mesas. */
+  tableOwners?: Record<number, { teamId: string; label: string }>;
+}) {
   const table = useActionRunner();
   const del = useActionRunner();
   const [tableValue, setTableValue] = useState(String(team.tableNumber));
@@ -79,14 +104,28 @@ export function TeamCard({ eventId, team, options }: { eventId: string; team: Bo
           {team.winner ? <Badge tone="accent">Reconocimiento</Badge> : null}
         </div>
       </div>
+      {readOnly ? (
+        <p className="mt-2 text-lg font-bold">Mesa {team.tableNumber}</p>
+      ) : (
       <form
         className="mt-2 flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           const n = Number(tableValue);
-          if (Number.isInteger(n) && n > 0 && n !== team.tableNumber) {
-            void table.run(() => setTableNumberAction(eventId, team.id, n));
+          if (!Number.isInteger(n) || n <= 0 || n === team.tableNumber) return;
+          const owner = tableOwners[n];
+          if (
+            owner &&
+            owner.teamId !== team.id &&
+            !confirm(
+              `La Mesa ${n} es de ${owner.label}: se intercambian y ese equipo pasa a la Mesa ${team.tableNumber}${
+                team.publishedAt ? " (lo ven en el celular)" : ""
+              }. ¿Seguro?`,
+            )
+          ) {
+            return;
           }
+          void table.run(() => setTableNumberAction(eventId, team.id, n));
         }}
       >
         <label className="text-lg font-bold" htmlFor={`table-${team.id}`}>
@@ -107,13 +146,22 @@ export function TeamCard({ eventId, team, options }: { eventId: string; team: Bo
           </Button>
         ) : null}
       </form>
+      )}
       {table.error ? <p className="text-sm text-danger">{table.error}</p> : null}
       {size === 0 ? (
         <p className="mt-2 text-sm text-muted">Equipo vacío.</p>
       ) : (
         <ul className={cn("mt-2 divide-y divide-line")}>
           {team.members.map((m) => (
-            <MemberRow key={m.participationId} eventId={eventId} member={m} teamId={team.id} options={options} />
+            <MemberRow
+              key={m.participationId}
+              eventId={eventId}
+              member={m}
+              teamId={team.id}
+              options={options}
+              readOnly={readOnly}
+              published={Boolean(team.publishedAt)}
+            />
           ))}
         </ul>
       )}
@@ -127,7 +175,7 @@ export function TeamCard({ eventId, team, options }: { eventId: string; team: Bo
         <span className="text-muted">
           {team.artifactCount} foto{team.artifactCount === 1 ? "" : "s"} · {team.hasAssessment ? "evaluado" : "sin evaluación"}
         </span>
-        {size === 0 ? (
+        {size === 0 && !readOnly ? (
           <Button
             size="sm"
             variant="ghost"

@@ -316,8 +316,8 @@ export interface RegisterResult {
  * - Identidad persistente por WhatsApp normalizado.
  * - En fase CHECKIN (14:20–14:25, desde el stand) queda CHECKED_IN automáticamente (PRD §12).
  * - En MATCHING/SPRINT se inscribe como llegada tarde (REGISTERED) y el staff decide.
- * - Si la misma persona ya estaba inscripta en el evento (otro celular o sesión), se reutiliza
- *   esa participación y este dispositivo pasa a usarla.
+ * - Si ese WhatsApp ya tiene una inscripción en este evento, no se toca: puede ser otra persona
+ *   usando un número ajeno. Quien cambió de celular recupera su lugar con "Recuperar mi lugar".
  */
 export async function registerParticipant(
   db: DbOrTx,
@@ -353,77 +353,39 @@ export async function registerParticipant(
     const current = await reload(tx, participation.id);
     if (isRegistered(current.status)) return { participation: current, merged: false, late };
 
+    const known = await findParticipantByWhatsapp(tx, phone.e164);
+    if (known) {
+      const existing = await tx.query.participations.findFirst({
+        where: and(
+          eq(participations.eventId, event.id),
+          eq(participations.participantId, known.id),
+          ne(participations.id, current.id),
+        ),
+        columns: { id: true },
+      });
+      if (existing) {
+        throw new DomainError(
+          "ALREADY_REGISTERED",
+          "Ese WhatsApp ya tiene una inscripción en este Innovatón. Si sos vos, tocá «Recuperar mi lugar».",
+        );
+      }
+    }
+
+    // Persona nueva, o conocida de otro evento (se actualiza el nombre con el último ingresado).
     const person = await upsertParticipantByWhatsapp(tx, { name, whatsappNormalized: phone.e164 });
-    const existing = await tx.query.participations.findFirst({
-      where: and(
-        eq(participations.eventId, event.id),
-        eq(participations.participantId, person.id),
-        ne(participations.id, current.id),
-      ),
-    });
-
-    const freshStatus: ParticipationStatus = autoCheckIn ? "CHECKED_IN" : "REGISTERED";
-    const communityConsentAt = input.communityConsent ? now : null;
-
-    if (!existing) {
-      const [updated] = await tx
-        .update(participations)
-        .set({
-          participantId: person.id,
-          status: freshStatus,
-          registeredAt: now,
-          checkedInAt: autoCheckIn ? now : null,
-          operationalConsentAt: now,
-          communityConsentAt,
-        })
-        .where(eq(participations.id, current.id))
-        .returning();
-      return { participation: updated, merged: false, late };
-    }
-
-    // La persona ya tenía una inscripción en este evento: se conserva esa fila.
-    const keepProfile = existing.teamId !== null || hasCompletedReflection(existing.status);
-    const alreadyPresent = PRESENT_STATUSES.includes(existing.status);
-    const tokenHash = current.resumeTokenHash;
-
-    if (!keepProfile) {
-      await tx
-        .delete(questionnaireAnswers)
-        .where(eq(questionnaireAnswers.participationId, existing.id));
-      await tx
-        .update(questionnaireAnswers)
-        .set({ participationId: existing.id })
-        .where(eq(questionnaireAnswers.participationId, current.id));
-    }
-    await tx.delete(participations).where(eq(participations.id, current.id));
-
-    const status: ParticipationStatus = alreadyPresent ? existing.status : freshStatus;
     const [updated] = await tx
       .update(participations)
       .set({
-        resumeTokenHash: tokenHash,
-        status,
-        registeredAt: existing.registeredAt ?? now,
-        checkedInAt: alreadyPresent ? existing.checkedInAt : autoCheckIn ? now : null,
-        operationalConsentAt: existing.operationalConsentAt ?? now,
-        communityConsentAt: input.communityConsent ? (existing.communityConsentAt ?? now) : null,
-        ...(keepProfile
-          ? {}
-          : {
-              preClarity: current.preClarity,
-              exploreScore: current.exploreScore,
-              createScore: current.createScore,
-              driveScore: current.driveScore,
-              initialMode: current.initialMode,
-              tiebreakModes: current.tiebreakModes,
-              firstChoiceId: current.firstChoiceId,
-              secondChoiceId: current.secondChoiceId,
-              secondChoiceAny: current.secondChoiceAny,
-            }),
+        participantId: person.id,
+        status: autoCheckIn ? "CHECKED_IN" : "REGISTERED",
+        registeredAt: now,
+        checkedInAt: autoCheckIn ? now : null,
+        operationalConsentAt: now,
+        communityConsentAt: input.communityConsent ? now : null,
       })
-      .where(eq(participations.id, existing.id))
+      .where(eq(participations.id, current.id))
       .returning();
-    return { participation: updated, merged: true, late };
+    return { participation: updated, merged: false, late };
   });
 }
 

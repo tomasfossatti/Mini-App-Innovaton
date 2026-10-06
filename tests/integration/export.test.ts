@@ -14,8 +14,14 @@ beforeEach(() => resetDb());
 afterAll(() => closeTestDb());
 
 const HEADER =
-  "nombre,whatsapp,estado,modo_inicial,primera_opcion,segunda_opcion,presente,hora_checkin," +
-  "desafio_asignado,equipo,mesa,equipos_publicados,consentimiento_operativo,consentimiento_comunidad,alta_staff";
+  "nombre;whatsapp;whatsapp_link;estado;modo_inicial;primera_opcion;segunda_opcion;presente;hora_checkin;" +
+  "desafio_asignado;equipo;mesa;equipos_publicados;consentimiento_operativo;consentimiento_comunidad;alta_staff";
+
+/** "+5493511234567" → "54 9 351 123 4567" (formato del CSV). */
+function csvPhone(e164: string): string {
+  const d = e164.replace(/\D/g, "");
+  return `${d.slice(0, 2)} ${d.slice(2, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}`;
+}
 
 /**
  * Escenario: desafíos A, B, C (C inactivo). Equipo publicado en mesa 2 (A) y borrador en mesa 1 (B).
@@ -103,7 +109,7 @@ function parseCsv(csv: string): string[][] {
     .replace(/^﻿/, "")
     .split("\r\n")
     .filter((line) => line !== "")
-    .map((line) => line.split(","));
+    .map((line) => line.split(";"));
 }
 
 describe("exportParticipantsCsv", () => {
@@ -116,14 +122,15 @@ describe("exportParticipantsCsv", () => {
     expect(csv.split("\r\n")[0]).toBe(`﻿${HEADER}`);
 
     const [header, ...rows] = parseCsv(csv);
-    expect(header.join(",")).toBe(HEADER);
+    expect(header.join(";")).toBe(HEADER);
     // Orden: primera opción (A antes que B) y luego nombre. Sin el recorrido anónimo.
     expect(rows.map((r) => r[0])).toEqual(["Ana", "Diego", "Zoe", "Bruno", "Carla"]);
 
     const byName = new Map(rows.map((r) => [r[0], r]));
     expect(byName.get("Ana")).toEqual([
       "Ana",
-      ana.participant.whatsappNormalized,
+      csvPhone(ana.participant.whatsappNormalized),
+      `https://wa.me/${ana.participant.whatsappNormalized.slice(1)}`,
       "MATCHED",
       "Impulsar",
       a.startupName,
@@ -138,9 +145,9 @@ describe("exportParticipantsCsv", () => {
       "sí",
       "no",
     ]);
-    expect(byName.get("Zoe")?.[5]).toBe("Cualquiera");
-    expect(byName.get("Bruno")?.slice(7, 12)).toEqual(["14:21", b.startupName, "1", "1", "no"]);
-    expect(byName.get("Carla")?.slice(2, 12)).toEqual([
+    expect(byName.get("Zoe")?.[6]).toBe("Cualquiera");
+    expect(byName.get("Bruno")?.slice(8, 13)).toEqual(["14:21", b.startupName, "1", "1", "no"]);
+    expect(byName.get("Carla")?.slice(3, 13)).toEqual([
       "REGISTERED",
       "Crear",
       b.startupName,
@@ -154,7 +161,8 @@ describe("exportParticipantsCsv", () => {
     ]);
     expect(byName.get("Diego")).toEqual([
       "Diego",
-      "+5493517654321",
+      csvPhone("+5493517654321"),
+      "https://wa.me/5493517654321",
       "CHECKED_IN",
       "",
       a.startupName,
@@ -170,7 +178,7 @@ describe("exportParticipantsCsv", () => {
       "sí",
     ]);
     // El teléfono va intacto (sin apóstrofo anti-fórmula).
-    expect(csv).toContain(",+5493517654321,");
+    expect(csv).toContain(";54 9 351 765 4321;https://wa.me/5493517654321;");
     expect(csv).not.toContain("'+549");
   });
 
@@ -182,8 +190,8 @@ describe("exportParticipantsCsv", () => {
 
     const { csv } = await exportParticipantsCsv(db, event.id, NOW);
     const lines = csv.replace(/^\uFEFF/, "").split("\r\n");
-    expect(lines[1].startsWith('"\'=HYPERLINK(""x"")",')).toBe(true);
-    expect(lines[2].startsWith('"Pérez, Juan",+549')).toBe(true);
+    expect(lines[1].startsWith('"\'=HYPERLINK(""x"")";')).toBe(true);
+    expect(lines[2].startsWith("Pérez, Juan;54 9 351")).toBe(true);
   });
 
   it("funciona dentro de una transacción abierta (usa esa misma foto)", async () => {
@@ -204,13 +212,13 @@ describe("exportParticipantsCsv", () => {
       });
       return exportParticipantsCsv(tx, event.id, NOW);
     });
-    expect(result.csv).toContain("Sin commit,+5493517000009,REGISTERED");
+    expect(result.csv).toContain("Sin commit;54 9 351 700 0009;https://wa.me/5493517000009;REGISTERED");
   });
 
   it("evento sin inscriptos: solo el header", async () => {
     const event = await makeEvent(db, { slug: "vacio" });
     const { csv } = await exportParticipantsCsv(db, event.id, NOW);
-    expect(parseCsv(csv)).toEqual([HEADER.split(",")]);
+    expect(parseCsv(csv)).toEqual([HEADER.split(";")]);
   });
 
   it("evento inexistente → EVENT_NOT_FOUND", async () => {

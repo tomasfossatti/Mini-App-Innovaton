@@ -2,9 +2,10 @@
 
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
+import type { ParticipationRow } from "@/lib/db/schema";
 import { readParticipantToken, setParticipantToken } from "@/lib/auth/participant-session";
 import { CAPABILITIES, MODES, REFLECTION_ACTIONS } from "@/lib/domain/constants";
-import { nextStep, stepPath } from "@/lib/domain/flow";
+import { isRegistered, nextStep, stepPath } from "@/lib/domain/flow";
 import { QUESTION_KEYS, shuffleOptions } from "@/lib/domain/questionnaire";
 import { DomainError } from "@/lib/services/errors";
 import { getEventBySlug } from "@/lib/services/events";
@@ -43,6 +44,14 @@ async function loadContext(eventSlug: string) {
   return { event, participation };
 }
 
+/**
+ * Pantalla vieja restaurada con "atrás": si la persona ya está inscripta, en lugar de un error
+ * sin salida se la manda a su estado actual.
+ */
+function alreadyPastThisStep(eventSlug: string, participation: ParticipationRow): { next: string } | null {
+  return isRegistered(participation.status) ? { next: stepPath(eventSlug, nextStep(participation)) } : null;
+}
+
 const slug = z.string().min(1).max(80);
 const mode = z.enum(MODES);
 const scale = z.number().int().min(1).max(5);
@@ -68,6 +77,8 @@ export async function savePreClarityAction(
   return runAction(async () => {
     const v = scale.parse(value);
     const { participation } = await loadContext(eventSlug);
+    const skip = alreadyPastThisStep(eventSlug, participation);
+    if (skip) return skip;
     await savePreClarity(getDb(), participation, v);
     return { next: stepPath(eventSlug, "assessment") };
   });
@@ -82,6 +93,7 @@ export async function saveAnswerAction(
     const key = z.enum(QUESTION_KEYS as [string, ...string[]]).parse(questionKey) as (typeof QUESTION_KEYS)[number];
     const m = mode.parse(selected);
     const { participation } = await loadContext(eventSlug);
+    if (isRegistered(participation.status)) return null;
     await saveAnswer(getDb(), participation, key, m);
     return null;
   });
@@ -96,6 +108,8 @@ export async function finalizeAssessmentAction(
   return runAction(async () => {
     const parsed = AnswersSchema.parse(answers);
     const { participation } = await loadContext(eventSlug);
+    const skip = alreadyPastThisStep(eventSlug, participation);
+    if (skip) return { kind: "RESOLVED" as const, next: skip.next };
     const outcome = await finalizeAssessment(getDb(), participation, parsed);
     if (outcome.kind === "TIE") {
       // Mismo orden estable que muestra la pantalla al recargar (sin sesgo hacia la primera opción).
@@ -112,6 +126,8 @@ export async function saveTieBreakAction(
   return runAction(async () => {
     const m = mode.parse(selected);
     const { participation } = await loadContext(eventSlug);
+    const skip = alreadyPastThisStep(eventSlug, participation);
+    if (skip) return skip;
     await saveTieBreak(getDb(), participation, m);
     return { next: stepPath(eventSlug, "result") };
   });
@@ -130,6 +146,8 @@ export async function saveChoicesAction(
   return runAction(async () => {
     const data = ChoicesSchema.parse(input);
     const { event, participation } = await loadContext(eventSlug);
+    const skip = alreadyPastThisStep(eventSlug, participation);
+    if (skip) return skip;
     await saveChallengeChoices(getDb(), event, participation, data);
     return { next: stepPath(eventSlug, "register") };
   });

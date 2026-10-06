@@ -24,15 +24,23 @@ export async function loginAction(
   });
   if (!parsed.success) return { ok: false, error: "Completá email y contraseña." };
   const db = getDb();
-  let staff;
+  let result;
   try {
-    staff = await authenticateStaff(db, parsed.data.email, parsed.data.password);
+    result = await authenticateStaff(db, parsed.data.email, parsed.data.password);
   } catch (err) {
     console.error("[login]", err);
     return { ok: false, error: "No pudimos verificar tus datos. Probá de nuevo." };
   }
-  if (!staff) return { ok: false, error: "Email o contraseña incorrectos." };
-  const { token } = await createStaffSession(db, staff.id);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error:
+        result.reason === "LOCKED"
+          ? "Demasiados intentos fallidos. Esperá 15 minutos o pedile a una persona ADMIN que te cambie la contraseña."
+          : "Email o contraseña incorrectos.",
+    };
+  }
+  const { token } = await createStaffSession(db, result.staff.id);
   await setStaffCookie(token);
   const next = parsed.data.next;
   redirect(next && next.startsWith("/staff") && !next.startsWith("//") ? next : "/staff");

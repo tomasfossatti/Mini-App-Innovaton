@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Progress } from "@/components/ui/Progress";
 import { cn } from "@/components/ui/cn";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 export interface PickerChallenge {
@@ -69,10 +70,10 @@ export function ChallengePicker({
 }) {
   const router = useRouter();
   const validIds = new Set(challenges.map((c) => c.id));
-  const [first, setFirst] = useState<string | null>(
+  const [pickedFirst, setFirst] = useState<string | null>(
     initial.firstChoiceId && validIds.has(initial.firstChoiceId) ? initial.firstChoiceId : null,
   );
-  const [second, setSecond] = useState<string | null>(
+  const [pickedSecond, setSecond] = useState<string | null>(
     initial.secondChoiceAny
       ? ANY
       : initial.secondChoiceId && validIds.has(initial.secondChoiceId)
@@ -80,7 +81,12 @@ export function ChallengePicker({
         : null,
   );
   const [step, setStep] = useState<1 | 2>(1);
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
+  // Si un desafío se desactivó mientras la lista estaba abierta, la elección se descarta sola
+  // cuando llega la lista actualizada.
+  const first = pickedFirst && validIds.has(pickedFirst) ? pickedFirst : null;
+  const second =
+    pickedSecond === ANY || (pickedSecond && validIds.has(pickedSecond) && pickedSecond !== first) ? pickedSecond : null;
 
   if (challenges.length === 0) {
     return <Notice tone="warn">Todavía no hay desafíos cargados. Acercate al stand de Espacio IDI.</Notice>;
@@ -98,6 +104,7 @@ export function ChallengePicker({
       }),
     );
     if (res?.ok) router.push(res.data.next);
+    else router.refresh();
   }
 
   if (step === 1) {
@@ -165,7 +172,7 @@ export function ChallengePicker({
             />
           ))}
       </div>
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      <ActionError error={error} needsReload={needsReload} />
       <div className="sticky bottom-0 -mx-4 space-y-2 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur">
         <Button disabled={!second} pending={pending} pendingLabel="Guardando…" onClick={() => void save()}>
           CONTINUAR

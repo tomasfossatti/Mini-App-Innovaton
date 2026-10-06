@@ -22,7 +22,7 @@ function Section({ title, children, breakBefore = true }: { title: string; child
 }
 
 export default async function PrintPage(props: PageProps<"/staff/events/[eventId]/print">) {
-  await requireStaffPage();
+  await requireStaffPage("ADMIN");
   const { eventId } = await props.params;
   const db = getDb();
   const event = await getEventById(db, eventId);

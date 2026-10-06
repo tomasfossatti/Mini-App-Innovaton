@@ -1,4 +1,4 @@
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/lib/db/client";
 import { staffMembers, staffSessions, type StaffMemberRow } from "@/lib/db/schema";
 import type { StaffRole } from "@/lib/domain/constants";
@@ -49,21 +49,54 @@ export async function ensureStaffMember(
   return { created: true };
 }
 
+export const MAX_FAILED_LOGINS = 10;
+export const LOCK_MINUTES = 15;
+
+export type AuthResult =
+  | { ok: true; staff: StaffIdentity }
+  | { ok: false; reason: "INVALID" | "LOCKED" };
+
+const DUMMY_HASH = "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA";
+
+/**
+ * Verifica email y contraseña. Tras MAX_FAILED_LOGINS fallos seguidos la cuenta queda bloqueada
+ * LOCK_MINUTES minutos (sin correr scrypt mientras dura el bloqueo).
+ */
 export async function authenticateStaff(
   db: DbOrTx,
   email: string,
   password: string,
-): Promise<StaffIdentity | null> {
+  now: Date = new Date(),
+): Promise<AuthResult> {
   const row = await db.query.staffMembers.findFirst({
     where: eq(staffMembers.email, normalizeEmail(email)),
   });
+  if (row?.lockedUntil && row.lockedUntil > now) return { ok: false, reason: "LOCKED" };
   // Se verifica igual una contraseña aunque no exista el usuario para no filtrar por tiempos.
-  const ok = await verifyPassword(
-    password,
-    row?.passwordHash ?? "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA",
-  );
-  if (!row || !row.active || !ok) return null;
-  return { id: row.id, email: row.email, name: row.name, role: row.role };
+  const ok = await verifyPassword(password, row?.passwordHash ?? DUMMY_HASH);
+  if (!row || !row.active) return { ok: false, reason: "INVALID" };
+  if (!ok) {
+    const [updated] = await db
+      .update(staffMembers)
+      .set({ failedLoginCount: sql`${staffMembers.failedLoginCount} + 1` })
+      .where(eq(staffMembers.id, row.id))
+      .returning({ failed: staffMembers.failedLoginCount });
+    if (updated && updated.failed >= MAX_FAILED_LOGINS) {
+      await db
+        .update(staffMembers)
+        .set({ failedLoginCount: 0, lockedUntil: new Date(now.getTime() + LOCK_MINUTES * 60_000) })
+        .where(eq(staffMembers.id, row.id));
+      return { ok: false, reason: "LOCKED" };
+    }
+    return { ok: false, reason: "INVALID" };
+  }
+  if (row.failedLoginCount !== 0 || row.lockedUntil) {
+    await db
+      .update(staffMembers)
+      .set({ failedLoginCount: 0, lockedUntil: null })
+      .where(eq(staffMembers.id, row.id));
+  }
+  return { ok: true, staff: { id: row.id, email: row.email, name: row.name, role: row.role } };
 }
 
 export async function createStaffSession(
@@ -142,7 +175,7 @@ export async function resetStaffPassword(
   }
   await db
     .update(staffMembers)
-    .set({ passwordHash: await hashPassword(password) })
+    .set({ passwordHash: await hashPassword(password), failedLoginCount: 0, lockedUntil: null })
     .where(eq(staffMembers.id, staffId));
   await db.delete(staffSessions).where(eq(staffSessions.staffId, staffId));
 }

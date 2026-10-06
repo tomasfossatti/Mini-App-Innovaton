@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/ui/ErrorState";
 
-export default function ParticipantError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function ParticipantError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   const params = useParams<{ eventSlug: string }>();
-  return <ErrorState error={error} reset={reset} homeHref={params?.eventSlug ? `/e/${params.eventSlug}` : "/"} />;
+  return <ErrorState error={error} retry={retry} homeHref={params?.eventSlug ? `/e/${params.eventSlug}` : "/"} />;
 }

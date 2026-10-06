@@ -5,10 +5,10 @@ import { useRef, useState } from "react";
 import { finalizeAssessmentAction, saveAnswerAction, saveTieBreakAction } from "@/actions/participant";
 import type { Mode } from "@/lib/domain/constants";
 import { Button } from "@/components/ui/Button";
-import { Notice } from "@/components/ui/Notice";
 import { Progress } from "@/components/ui/Progress";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/components/ui/cn";
+import { ActionError } from "@/components/ui/ActionError";
 import { useActionRunner } from "@/components/ui/useActionRunner";
 
 export interface AssessmentQuestion {
@@ -45,25 +45,31 @@ export function AssessmentFlow({
   const [index, setIndex] = useState(firstPending === -1 ? total - 1 : firstPending);
   const [tie, setTie] = useState<TieOption[] | null>(firstPending === -1 ? initialTie : null);
   const [flash, setFlash] = useState<Mode | null>(null);
+  // Cubre la espera de los guardados en segundo plano antes de finalizar (red lenta).
+  const [finishing, setFinishing] = useState(false);
   const pendingSaves = useRef<Promise<unknown>[]>([]);
-  const { run, pending, error } = useActionRunner();
+  const { run, pending, error, needsReload } = useActionRunner();
 
   const question = questions[index];
 
   async function finalize(all: Record<string, Mode>) {
+    setFinishing(true);
     await Promise.allSettled(pendingSaves.current);
     pendingSaves.current = [];
     const res = await run(() => finalizeAssessmentAction(eventSlug, all));
-    if (!res?.ok) return;
-    if (res.data.kind === "RESOLVED") {
+    if (res?.ok && res.data.kind === "RESOLVED") {
+      // Se mantiene el estado de espera mientras navega al resultado.
       router.push(res.data.next);
-    } else {
+      return;
+    }
+    setFinishing(false);
+    if (res?.ok && res.data.kind === "TIE") {
       setTie(res.data.modes.map((m) => allTieOptions[m as Mode]));
     }
   }
 
   function choose(mode: Mode) {
-    if (pending || flash) return;
+    if (pending || flash || finishing) return;
     const next = { ...answers, [question.key]: mode };
     setAnswers(next);
     setFlash(mode);
@@ -109,7 +115,7 @@ export function AssessmentFlow({
             <Spinner className="size-4" /> Guardando…
           </p>
         ) : null}
-        {error ? <Notice tone="error">{error}</Notice> : null}
+        <ActionError error={error} needsReload={needsReload} />
       </div>
     );
   }
@@ -128,7 +134,7 @@ export function AssessmentFlow({
               type="button"
               role="radio"
               aria-checked={isSelected}
-              disabled={pending}
+              disabled={pending || finishing}
               onClick={() => choose(o.mode)}
               className={cn(
                 "block min-h-16 w-full rounded-2xl border-2 px-5 py-4 text-left text-lg leading-snug transition disabled:opacity-60",
@@ -140,22 +146,19 @@ export function AssessmentFlow({
           );
         })}
       </div>
-      {pending ? (
+      {pending || finishing ? (
         <p className="flex items-center gap-2 text-muted" role="status">
           <Spinner className="size-4" /> Preparando tu resultado…
         </p>
       ) : null}
-      {error ? (
-        <div className="space-y-3">
-          <Notice tone="error">{error}</Notice>
-          {index === total - 1 && Object.keys(answers).length === total ? (
-            <Button variant="secondary" onClick={() => void finalize(answers)}>
-              Reintentar
-            </Button>
-          ) : null}
-        </div>
+      <ActionError error={error} needsReload={needsReload} />
+      {/* Con las 5 respuestas dadas (volvió atrás, recargó o falló la red) siempre hay salida. */}
+      {index === total - 1 && Object.keys(answers).length === total && !pending && !finishing && !flash ? (
+        <Button variant={error ? "secondary" : "primary"} onClick={() => void finalize(answers)}>
+          {error ? "Reintentar" : "VER MI RESULTADO"}
+        </Button>
       ) : null}
-      {index > 0 && !pending ? (
+      {index > 0 && !pending && !finishing ? (
         <button
           type="button"
           onClick={() => setIndex(index - 1)}

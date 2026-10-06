@@ -181,8 +181,14 @@ test("dos staff generan equipos al mismo tiempo: un único set coherente", async
     a.page.getByRole("button", { name: /Generar equipos/ }).click(),
     b.page.getByRole("button", { name: /Generar equipos/ }).click(),
   ]);
-  await expect(a.page.getByText(/3 equipos · 9 personas asignadas/)).toBeVisible();
-  await expect(b.page.getByText(/3 equipos · 9 personas asignadas/)).toBeVisible();
+  // Uno genera; el otro, que miraba el tablero vacío, recibe el aviso y ve el tablero nuevo.
+  const outcome = /3 equipos · 9 personas asignadas|Otra persona cambió los equipos/;
+  await expect(a.page.getByText(outcome)).toBeVisible();
+  await expect(b.page.getByText(outcome)).toBeVisible();
+  const generated =
+    (await a.page.getByText(/3 equipos · 9 personas asignadas/).count()) +
+    (await b.page.getByText(/3 equipos · 9 personas asignadas/).count());
+  expect(generated).toBeGreaterThanOrEqual(1);
   const teams = await db.select().from(s.teams).where(eq(s.teams.eventId, event.id));
   expect(teams).toHaveLength(3);
   expect(new Set(teams.map((t) => t.tableNumber)).size).toBe(3);
@@ -192,7 +198,8 @@ test("dos staff generan equipos al mismo tiempo: un único set coherente", async
     .where(and(eq(s.participations.eventId, event.id), isNotNull(s.participations.teamId)));
   expect(assigned).toHaveLength(9);
 
-  // Publicar desde uno; el otro ya no puede regenerar.
+  // Publicar desde uno (con la vista al día); el otro ya no puede regenerar.
+  await a.page.reload();
   await a.page.getByRole("button", { name: "Publicar equipos" }).click();
   await expect(a.page.getByText("Equipos publicados")).toBeVisible();
   await b.page.reload();
