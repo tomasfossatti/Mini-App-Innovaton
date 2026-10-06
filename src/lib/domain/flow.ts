@@ -90,7 +90,8 @@ export function canAccess(step: ParticipantStep, p: FlowParticipation | null, ph
     return false;
   }
   const target = PRE_REGISTRATION_ORDER.indexOf(step);
-  const limit = PRE_REGISTRATION_ORDER.indexOf(next);
+  // Desde el resultado inicial se puede pasar a elegir desafíos (es el CTA de esa pantalla).
+  const limit = PRE_REGISTRATION_ORDER.indexOf(next) + (next === "result" ? 1 : 0);
   return target !== -1 && target <= limit;
 }
 

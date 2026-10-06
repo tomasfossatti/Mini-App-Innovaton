@@ -39,6 +39,12 @@ describe("canAccess", () => {
     expect(canAccess("register", { ...base, preClarity: 2 }, "REGISTRATION")).toBe(false);
     expect(canAccess("status", ready, "REGISTRATION")).toBe(false);
   });
+  it("desde el resultado se puede ir a elegir desafíos, pero no a inscribirse", () => {
+    const profiled = { ...base, preClarity: 3, initialMode: "EXPLORE" as const, status: "PROFILE_COMPLETED" as const };
+    expect(canAccess("result", profiled, "REGISTRATION")).toBe(true);
+    expect(canAccess("challenges", profiled, "REGISTRATION")).toBe(true);
+    expect(canAccess("register", profiled, "REGISTRATION")).toBe(false);
+  });
   it("después de inscribirse solo status/reflexión/outcome", () => {
     const reg = { ...ready, status: "MATCHED" as const, teamId: "t" };
     expect(canAccess("clarity", reg, "SPRINT")).toBe(false);

@@ -1,0 +1,41 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { recoverAction } from "@/actions/participant";
+import { Button } from "@/components/ui/Button";
+import { Field, TextInput } from "@/components/ui/Field";
+import { Notice } from "@/components/ui/Notice";
+import { useActionRunner } from "@/components/ui/useActionRunner";
+
+export function RecoverForm({ eventSlug }: { eventSlug: string }) {
+  const router = useRouter();
+  const [whatsapp, setWhatsapp] = useState("");
+  const { run, pending, error } = useActionRunner();
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const res = await run(() => recoverAction(eventSlug, whatsapp));
+    if (res?.ok) router.push(res.data.next);
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-5">
+      <Field label="El WhatsApp con el que te inscribiste" htmlFor="rec-wa">
+        <TextInput
+          id="rec-wa"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          required
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+        />
+      </Field>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Button type="submit" pending={pending} pendingLabel="Buscando…">
+        RECUPERAR MI LUGAR
+      </Button>
+    </form>
+  );
+}
