@@ -110,18 +110,20 @@ En el evento, pestaña **Configuración** (solo ADMIN): cada desafío lleva star
 | Antes | **Abrir inscripción**. Monitorear registrados por desafío. Imprimir la hoja del evento y el **Kit analógico** (pestaña **Imprimir**) mientras hay conexión, e iniciar sesión en los celulares del staff y de los founders. |
 | 14:10–14:20 | Recordatorio por WhatsApp: tocar el teléfono de cada persona abre WhatsApp con el mensaje listo. |
 | 14:15 | **Descargar CSV** (respaldo). |
-| 14:20 | **Abrir check-in**. Quien se inscribe desde ahora queda presente automáticamente. Check-in manual con el buscador; **Alta rápida** para quien no tiene celular. |
+| 14:20 | **Abrir check-in**. Quien se inscribe desde ahora queda presente automáticamente. Check-in manual con el buscador; **Alta rápida** para quien no tiene celular, con su modo E/C/I si hizo el cuestionario en papel. |
 | 14:25 | **Cerrar inscripción**. Descargar CSV otra vez. |
-| 14:25–14:30 | Pestaña **Equipos** → **Generar equipos** (solo presentes) → revisar, mover personas, cambiar mesas → **Publicar equipos**. Cada participante ve startup, equipo y mesa en su celular. |
+| 14:25–14:30 | Pestaña **Equipos** → **Generar equipos** (solo presentes) → revisar, mover personas, cambiar mesas → **Publicar equipos**. Cada participante ve startup, equipo y mesa en su celular. Con muy poca gente, si no se forma ningún equipo: **+ Equipo vacío** en el desafío y asignar a mano, aunque sean 1 o 2. |
 | 14:30–14:40 | Latecomers: aparecen en **Equipos** con una sugerencia de un toque (equipo de 3, quinto excepcional, segunda opción, equipo nuevo con 3 compatibles). |
 | Sprint y pitch | **A3 y evaluación** por equipo: foto del A3, bloques completos, Problema / Valor / Prueba, feedback, reconocimiento y contribución individual. Los founders pueden usar una cuenta STAFF y filtrar sus equipos. |
-| 15:27 | **Pasar a pitch** → **Abrir reflexión**. Cada participante completa la reflexión y recibe interpretación, próximo experimento y CTA de Espacio IDI. Quien la hizo en papel o no tiene celular se carga desde **A3 y evaluación** → «Reflexión en papel». |
+| 15:27 | **Pasar a pitch** → **Abrir reflexión**. Cada participante completa la reflexión y recibe interpretación, próximo experimento y CTA de Espacio IDI. Quien la hizo en papel o no tiene celular se carga desde **A3 y evaluación** → «Reflexión en papel», con el modo del cuestionario en papel si faltaba. |
 
 **Cuentas y roles.** Se crean en **Cuentas** (ADMIN) o con `pnpm staff:create <email> <clave> "<nombre>" <ADMIN|STAFF>`.
 
 - **ADMIN**: staff principal (Director/Host y Control de 03 §1). Maneja fases, matching, publicación, movimientos, mesas, respaldos con WhatsApp y configuración.
-- **STAFF**: founders, facilitación y recepción. Hacen check-in, alta rápida, suman latecomers con la sugerencia del tablero y cargan A3, evaluación, contribución individual y reflexión en papel. Ven los teléfonos enmascarados (`•••• 4567`) y no descargan respaldos.
+- **STAFF**: founders, facilitación y recepción. Hacen check-in, alta rápida, generan códigos para recuperar una sesión, suman latecomers con la sugerencia del tablero y cargan A3, evaluación, contribución individual y reflexión en papel. Ven los teléfonos enmascarados (`•••• 4567`) y no descargan respaldos.
 - Tras 10 intentos fallidos de login la cuenta se bloquea 15 minutos (o hasta que un ADMIN le cambie la contraseña). Conviene desactivar las cuentas de founders al cerrar el evento.
+
+**Recuperar una sesión.** Si alguien cambió de celular o se le borró la sesión, en el Panel se toca **Código para recuperar** en su fila y se le dicta el código de 6 dígitos. La persona lo ingresa con su WhatsApp en «Recuperá tu lugar». El código vence a los 15 minutos, sirve una sola vez y se invalida tras 5 intentos fallidos. El WhatsApp solo no alcanza para abrir una inscripción.
 
 El detalle completo está en [07 — Roles y datos personales](docs/innovaton/07-implementation-decisions.md#roles-y-datos-personales).
 
@@ -156,11 +158,8 @@ Supabase funciona igual: alcanza con usar su connection string con pooler como `
 
 ## Limitaciones conocidas
 
-- **Muy poca gente presente.** Con unas 6 personas o menos, si nadie coincide en desafío, el matching puede no formar ningún equipo, y en ese caso el tablero no ofrece **+ Equipo vacío**. Con la asistencia esperada (20–60) no pasa. En un ensayo con pocos celulares alcanza con que al menos 3 personas elijan el mismo desafío.
-- **Personas que el matching no ubica.** En casos raros la consolidación deja a alguien sin equipo. Nunca se pierde: aparece en **Presentes sin equipo** con su 1ª y 2ª opción, y el staff lo asigna a mano.
-- **Recuperación por WhatsApp sin segundo factor.** Quien conoce el número de otra persona puede abrir su sesión: ve su mesa, su resultado final y, si la reflexión está abierta y la otra persona no la hizo, puede enviarla una sola vez. No ve nombre ni teléfono. Riesgo aceptado para un evento de una hora (ver 07).
+- **Personas que el matching no ubica.** El matching no arma equipos de menos de 3 y, en casos raros, la consolidación deja a alguien sin equipo. Nadie se pierde: aparece en **Presentes sin equipo** con su 1ª y 2ª opción, y el ADMIN lo asigna a mano. Con muy poca gente, aunque no se haya formado ningún equipo, **+ Equipo vacío** permite armar uno de 1 o 2 personas y publicarlo; el tablero avisa que es chico.
 - **Bloqueo de login.** Diez intentos fallidos bloquean la cuenta 15 minutos, aunque después se use la contraseña correcta. Las sesiones abiertas no se ven afectadas: conviene que el staff inicie sesión antes del evento y tener dos cuentas ADMIN.
-- **Inscripciones en papel.** Al cargarlas con el alta rápida no se guarda el modo E/C/I del cuestionario en papel; la interpretación final se hace sin hipótesis inicial.
 
 ## Fuera del MVP
 

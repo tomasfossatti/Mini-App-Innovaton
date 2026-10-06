@@ -174,6 +174,11 @@ export async function submitReflection(
   participationId: string,
   input: ReflectionInput,
   now: Date = new Date(),
+  /**
+   * Solo para la carga del staff: el modo del cuestionario hecho en papel. Completa un
+   * initial_mode vacío antes de interpretar; nunca pisa uno existente ni crea evidencia.
+   */
+  opts: { initialMode?: Mode | null } = {},
 ): Promise<{ alreadySubmitted: boolean; interpretationId: string }> {
   const data = normalizeInput(input);
   if (!PHASES_OPEN_FOR_REFLECTION.includes(event.phase)) {
@@ -220,6 +225,13 @@ export async function submitReflection(
     if (current.teamId !== preview.teamId) {
       // Lo movieron de equipo entre las dos lecturas: no tomamos otro lock con la fila bloqueada.
       throw new DomainError("RETRY", "Hubo un cambio en tu equipo. Tocá enviar de nuevo.");
+    }
+    if (opts.initialMode && current.initialMode === null) {
+      // interpretParticipation relee la fila en esta misma transacción y usa la hipótesis.
+      await tx
+        .update(participations)
+        .set({ initialMode: opts.initialMode })
+        .where(eq(participations.id, participationId));
     }
 
     const [reflection] = await tx

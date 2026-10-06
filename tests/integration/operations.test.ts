@@ -830,6 +830,49 @@ describe("staffQuickAdd", () => {
     expect(await reload(first.participationId)).toMatchObject({ firstChoiceId: b.id, secondChoiceId: a.id });
   });
 
+  it("guarda el modo del cuestionario en papel sin crear evidencia y nunca pisa uno existente", async () => {
+    const { event, challenges: [a, b] } = await setup();
+    const paper = await staffQuickAdd(
+      db,
+      event,
+      { name: "Oli", whatsapp: "351 555 6666", firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true, initialMode: "CREATE" },
+      NOW,
+    );
+    expect(await reload(paper.participationId)).toMatchObject({ initialMode: "CREATE", addedByStaff: true });
+    expect(await db.select().from(s.evidenceItems)).toHaveLength(0);
+    expect(await db.select().from(s.questionnaireAnswers)).toHaveLength(0);
+
+    // Alta previa sin modo: el modo en papel lo completa.
+    const noMode = await staffQuickAdd(
+      db,
+      event,
+      { name: "Pau", whatsapp: "351 777 8888", firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true },
+      NOW,
+    );
+    expect((await reload(noMode.participationId)).initialMode).toBeNull();
+    await staffQuickAdd(
+      db,
+      event,
+      { name: "Pau", whatsapp: "351 777 8888", firstChoiceId: a.id, secondChoiceId: null, secondChoiceAny: true, initialMode: "DRIVE" },
+      NOW,
+    );
+    expect((await reload(noMode.participationId)).initialMode).toBe("DRIVE");
+
+    // Quien hizo el cuestionario en el celular conserva su modo.
+    const { participation, participant } = await makeRegistered(db, event.id, {
+      name: "Quique",
+      firstChoiceId: b.id,
+      secondChoiceAny: true,
+    });
+    await staffQuickAdd(
+      db,
+      event,
+      { name: "Quique", whatsapp: participant.whatsappNormalized, firstChoiceId: b.id, secondChoiceId: null, secondChoiceAny: true, initialMode: "DRIVE" },
+      NOW,
+    );
+    expect((await reload(participation.id)).initialMode).toBe("EXPLORE");
+  });
+
   it("la misma persona inscripta en otro evento: crea una participation nueva en este", async () => {
     const { event, challenges: [a] } = await setup();
     const other = await makeEvent(db);

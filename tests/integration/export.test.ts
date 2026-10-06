@@ -4,7 +4,7 @@ import * as s from "@/lib/db/schema";
 import { generateToken, sha256 } from "@/lib/auth/crypto";
 import { DomainError } from "@/lib/services/errors";
 import { exportBackupJson, exportParticipantsCsv, getPrintData } from "@/lib/services/export";
-import { staffQuickAdd } from "@/lib/services/operations";
+import { createRecoveryCode, staffQuickAdd } from "@/lib/services/operations";
 import { closeTestDb, makeChallenges, makeEvent, makeRegistered, resetDb, testDb } from "./helpers";
 
 const db = testDb();
@@ -301,6 +301,12 @@ describe("exportBackupJson", () => {
     const [otherChallenge] = await makeChallenges(db, other.id, 1);
     const outsider = await makeRegistered(db, other.id, { firstChoiceId: otherChallenge.id, secondChoiceAny: true });
 
+    await createRecoveryCode(db, event.id, ana.participation.id, NOW);
+    const withCode = await db.query.participations.findFirst({
+      where: eq(s.participations.id, ana.participation.id),
+    });
+    expect(withCode?.recoveryCodeHash).toMatch(/^[0-9a-f]{64}$/);
+
     const { filename, data } = await exportBackupJson(db, event.id, NOW);
     expect(filename).toBe("innovaton-innovaton-test-backup-20261015-1422.json");
     expect(Object.keys(data).sort()).toEqual(
@@ -351,6 +357,9 @@ describe("exportBackupJson", () => {
     const json = JSON.stringify(data);
     expect(json).not.toContain(ana.participation.resumeTokenHash);
     expect(json).not.toContain("resumeTokenHash");
+    expect(json).not.toContain(withCode!.recoveryCodeHash!);
+    expect(json).not.toContain("recoveryCode");
+    expect(json).not.toContain("recoveryAttempts");
     expect(json).not.toContain(Buffer.from("bytes-secretos").toString("base64"));
     expect(JSON.parse(json).event.slug).toBe("innovaton-test");
   });

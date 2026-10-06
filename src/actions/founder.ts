@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
 import { requireStaffAction } from "@/lib/auth/staff";
-import { A3_BLOCKS, CAPABILITIES, OBSERVER_SOURCES } from "@/lib/domain/constants";
+import { A3_BLOCKS, CAPABILITIES, MODES, OBSERVER_SOURCES } from "@/lib/domain/constants";
 import { requireEvent } from "@/lib/services/events";
 import { submitReflection } from "@/lib/services/reflection";
 import { ReflectionSchema, type ReflectionFormInput } from "@/lib/validation/reflection";
@@ -110,15 +110,23 @@ export async function submitReflectionByStaffAction(
   eventId: string,
   participationId: string,
   input: ReflectionFormInput,
+  /** Modo del cuestionario en papel, si la persona no tenía uno. Va aparte de ReflectionSchema,
+   * que comparte el participante: desde el celular nadie puede fijar su propio modo. */
+  initialMode?: string | null,
 ) {
   return founderOp(eventId, async () => {
     const data = ReflectionSchema.parse(input);
+    const mode = z.enum(MODES).nullable().optional().parse(initialMode);
     const db = getDb();
     const event = await requireEvent(db, eventId);
-    const result = await submitReflection(db, event, id.parse(participationId), {
-      ...data,
-      primaryContributionText: data.primaryContributionText?.trim() || null,
-    });
+    const result = await submitReflection(
+      db,
+      event,
+      id.parse(participationId),
+      { ...data, primaryContributionText: data.primaryContributionText?.trim() || null },
+      new Date(),
+      { initialMode: mode },
+    );
     return { alreadySubmitted: result.alreadySubmitted };
   });
 }

@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { quickAddAction } from "@/actions/staff";
+import { MODES, type Mode } from "@/lib/domain/constants";
+import { MODE_LABELS, MODE_SHORT } from "@/lib/domain/copy";
 import { Button } from "@/components/ui/Button";
 import { Field, Select, TextInput } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
@@ -20,6 +22,7 @@ export function QuickAddForm({
   const [whatsapp, setWhatsapp] = useState("");
   const [first, setFirst] = useState("");
   const [second, setSecond] = useState(ANY);
+  const [mode, setMode] = useState<Mode | "">("");
   const [done, setDone] = useState<string | null>(null);
   const { run, pending, error } = useActionRunner();
 
@@ -33,6 +36,7 @@ export function QuickAddForm({
         firstChoiceId: first,
         secondChoiceId: second === ANY ? null : second,
         secondChoiceAny: second === ANY,
+        initialMode: mode || null,
       }),
     );
     if (res?.ok) {
@@ -41,6 +45,7 @@ export function QuickAddForm({
       setWhatsapp("");
       setFirst("");
       setSecond(ANY);
+      setMode("");
     }
   }
 
@@ -81,6 +86,16 @@ export function QuickAddForm({
                 {c.startupName}
               </option>
             ))}
+        </Select>
+      </Field>
+      <Field label="Modo del cuestionario en papel (opcional)" htmlFor="qa-mode">
+        <Select id="qa-mode" value={mode} onChange={(e) => setMode(e.target.value as Mode | "")}>
+          <option value="">Sin cuestionario</option>
+          {MODES.map((m) => (
+            <option key={m} value={m}>
+              {MODE_SHORT[m]} · {MODE_LABELS[m]}
+            </option>
+          ))}
         </Select>
       </Field>
       <div className="space-y-3 sm:col-span-2">

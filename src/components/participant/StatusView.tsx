@@ -129,7 +129,7 @@ export function StatusView({
     return (
       <Notice tone="warn" title="Se perdió la sesión en este navegador">
         <Link href={`/e/${eventSlug}/recover`} className="font-semibold underline">
-          Recuperá tu lugar con tu WhatsApp
+          Recuperá tu lugar con un código del stand
         </Link>
       </Notice>
     );

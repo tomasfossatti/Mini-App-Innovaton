@@ -8,6 +8,7 @@ import {
   finalizeAssessment,
   getParticipantState,
   getParticipationByToken,
+  RECOVERY_MAX_ATTEMPTS,
   recoverParticipation,
   registerCommunityInterest,
   registerParticipant,
@@ -18,6 +19,7 @@ import {
   startParticipation,
 } from "@/lib/services/participation";
 import { DomainError } from "@/lib/services/errors";
+import { createRecoveryCode } from "@/lib/services/operations";
 import { closeTestDb, makeChallenges, makeEvent, resetDb, testDb } from "./helpers";
 
 const db = testDb();
@@ -216,8 +218,9 @@ describe("flujo del participante", () => {
     expect(after.communityConsentAt).not.toBeNull();
     expect((await db.query.participants.findFirst())?.name).toBe("Caro");
     expect((await reload(second.id)).status).toBe("PROFILE_COMPLETED");
-    // La salida legítima es recuperar el lugar.
-    const rec = await recoverParticipation(db, ev, "351 15 222 3333");
+    // La salida legítima es recuperar el lugar con el código que da el staff en el stand.
+    const { code } = await createRecoveryCode(db, ev.id, first.id);
+    const rec = await recoverParticipation(db, ev, "351 15 222 3333", code);
     expect(rec.participation.id).toBe(first.id);
   });
 
@@ -294,26 +297,100 @@ describe("check-in", () => {
 });
 
 describe("recuperación de sesión y estado", () => {
-  it("recupera con WhatsApp escrito distinto y rota el token", async () => {
+  async function registered(name: string, whatsapp: string) {
     const { event, challenges } = await setup();
     const { id, token } = await readyToRegister(event, challenges[0].id, challenges[1].id);
     await registerParticipant(db, event, await reload(id), {
-      name: "Gabi",
-      whatsapp: "351 15 444 5555",
+      name,
+      whatsapp,
       operationalConsent: true,
       communityConsent: false,
     });
-    await expect(recoverParticipation(db, event, "351 999 9999")).rejects.toThrow(/No encontramos/);
-    const rec = await recoverParticipation(db, event, "+54 9 351 444-5555");
+    return { event, challenges, id, token };
+  }
+
+  it("el WhatsApp solo no alcanza: hace falta el código del staff", async () => {
+    const { event, id, token } = await registered("Gabi", "351 15 444 5555");
+    await expect(recoverParticipation(db, event, "+54 9 351 444-5555", "123456")).rejects.toMatchObject({
+      code: "RECOVERY_FAILED",
+    });
+    expect(await getParticipationByToken(db, event.id, token)).not.toBeNull();
+    expect((await reload(id)).recoveryAttempts).toBe(0); // sin código activo no hay nada que probar
+  });
+
+  it("con el código del staff recupera aunque el número esté escrito distinto, rota el token y el código es de un solo uso", async () => {
+    const { event, id, token } = await registered("Gabi", "351 15 444 5555");
+    const { code, expiresAt } = await createRecoveryCode(db, event.id, id);
+    expect(code).toMatch(/^\d{6}$/);
+    expect(expiresAt.getTime()).toBeGreaterThan(Date.now() + 14 * 60_000);
+    const rec = await recoverParticipation(db, event, "+54 9 351 444-5555", ` ${code.slice(0, 3)} ${code.slice(3)} `);
     expect(rec.participation.id).toBe(id);
     expect((await getParticipationByToken(db, event.id, rec.token))?.id).toBe(id);
     expect(await getParticipationByToken(db, event.id, token)).toBeNull();
+    const after = await reload(id);
+    expect(after.recoveryCodeHash).toBeNull();
+    expect(after.recoveryCodeExpiresAt).toBeNull();
+    // El mismo código no sirve una segunda vez (por ejemplo, desde otro celular).
+    await expect(recoverParticipation(db, event, "3514445555", code)).rejects.toMatchObject({
+      code: "RECOVERY_FAILED",
+    });
   });
 
-  it("no recupera inscripciones incompletas", async () => {
-    const { event, challenges } = await setup();
-    await readyToRegister(event, challenges[0].id, challenges[1].id);
-    await expect(recoverParticipation(db, event, "3511234567")).rejects.toThrow(/No encontramos/);
+  it("se invalida tras 5 intentos fallidos y cada intento queda contado", async () => {
+    const { event, id } = await registered("Ivo", "3516667777");
+    const { code } = await createRecoveryCode(db, event.id, id);
+    const wrong = code === "000000" ? "111111" : "000000";
+    for (let i = 1; i <= RECOVERY_MAX_ATTEMPTS; i++) {
+      await expect(recoverParticipation(db, event, "3516667777", wrong)).rejects.toMatchObject({
+        code: "RECOVERY_FAILED",
+      });
+      expect((await reload(id)).recoveryAttempts).toBe(i);
+    }
+    expect((await reload(id)).recoveryCodeHash).toBeNull();
+    // Ni siquiera el código correcto sirve ya: el staff tiene que generar otro.
+    await expect(recoverParticipation(db, event, "3516667777", code)).rejects.toMatchObject({
+      code: "RECOVERY_FAILED",
+    });
+    const fresh = await createRecoveryCode(db, event.id, id);
+    expect((await reload(id)).recoveryAttempts).toBe(0);
+    const rec = await recoverParticipation(db, event, "3516667777", fresh.code);
+    expect(rec.participation.id).toBe(id);
+  });
+
+  it("un código vencido o reemplazado no sirve", async () => {
+    const { event, id } = await registered("Juli", "3518889999");
+    const old = await createRecoveryCode(db, event.id, id, new Date(Date.now() - 16 * 60_000));
+    await expect(recoverParticipation(db, event, "3518889999", old.code)).rejects.toMatchObject({
+      code: "RECOVERY_FAILED",
+    });
+    const first = await createRecoveryCode(db, event.id, id);
+    const second = await createRecoveryCode(db, event.id, id);
+    if (first.code !== second.code) {
+      await expect(recoverParticipation(db, event, "3518889999", first.code)).rejects.toMatchObject({
+        code: "RECOVERY_FAILED",
+      });
+    }
+    const rec = await recoverParticipation(db, event, "3518889999", second.code);
+    expect(rec.participation.id).toBe(id);
+  });
+
+  it("número desconocido, código mal formado e inscripción incompleta", async () => {
+    const { event, challenges, id } = await registered("Kim", "3511112222");
+    const { code } = await createRecoveryCode(db, event.id, id);
+    // Mismo mensaje para un número que no está inscripto: no revela quién se inscribió.
+    const unknown = await recoverParticipation(db, event, "351 999 9999", code).catch((e: DomainError) => e);
+    const wrong = await recoverParticipation(db, event, "3511112222", code === "000000" ? "111111" : "000000").catch(
+      (e: DomainError) => e,
+    );
+    expect(unknown).toMatchObject({ code: "RECOVERY_FAILED" });
+    expect((unknown as DomainError).message).toBe((wrong as DomainError).message);
+    await expect(recoverParticipation(db, event, "3511112222", "12a")).rejects.toMatchObject({ code: "INVALID_CODE" });
+    expect((await reload(id)).recoveryAttempts).toBe(1); // el código mal formado no gasta intentos
+
+    const incomplete = await readyToRegister(event, challenges[0].id, null);
+    await expect(createRecoveryCode(db, event.id, incomplete.id)).rejects.toMatchObject({ code: "NOT_REGISTERED" });
+    const other = await makeEvent(db);
+    await expect(createRecoveryCode(db, other.id, id)).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   it("el estado nunca muestra equipos borrador", async () => {

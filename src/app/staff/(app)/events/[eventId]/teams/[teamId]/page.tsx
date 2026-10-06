@@ -173,7 +173,7 @@ export default async function TeamDetailPage(props: PageProps<"/staff/events/[ev
                     Cargar la reflexión de {m.name}
                   </summary>
                   <div className="mt-2">
-                    <StaffReflectionForm eventId={event.id} participationId={m.participationId} name={m.name} />
+                    <StaffReflectionForm eventId={event.id} participationId={m.participationId} name={m.name} initialMode={m.initialMode} />
                   </div>
                 </details>
               ))}

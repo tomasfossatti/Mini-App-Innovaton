@@ -431,6 +431,35 @@ describe("publishTeams", () => {
   });
 });
 
+describe("muy poca gente presente", () => {
+  it("el matching no forma equipos, pero el staff arma uno de 2 a mano y lo publica", async () => {
+    const { db, event, challenges } = await setup();
+    const [a, b, c] = challenges;
+    const [ana] = await addPeople(event.id, 1, { firstChoiceId: a.id, secondChoiceId: b.id, secondChoiceAny: false });
+    const [beto] = await addPeople(event.id, 1, { firstChoiceId: c.id, secondChoiceId: b.id, secondChoiceAny: false });
+
+    const result = await generateTeams(db, event.id);
+    expect(result.teamCount).toBe(0);
+    expect(result.unresolved).toHaveLength(2);
+    const before = await getTeamsBoard(db, event.id);
+    expect(before.teams).toHaveLength(0);
+    expect(before.unassigned.map((p) => p.participationId).sort()).toEqual([ana.id, beto.id].sort());
+
+    const team = await createTeam(db, event.id, a.id, NOW);
+    await moveParticipant(db, event.id, ana.id, team.id);
+    await moveParticipant(db, event.id, beto.id, team.id);
+    const board = await getTeamsBoard(db, event.id);
+    expect(board.unassigned).toHaveLength(0);
+    expect(board.warnings.some((w) => w.code === "TEAM_TOO_SMALL")).toBe(true);
+
+    const published = await publishTeams(db, event.id, NOW);
+    expect(published).toMatchObject({ alreadyPublished: false, teamCount: 1, matchedCount: 2 });
+    expect((await participation(ana.id)).status).toBe("MATCHED");
+    expect((await participation(beto.id)).status).toBe("MATCHED");
+    expect((await participation(beto.id)).assignmentSource).toBe("MANUAL");
+  });
+});
+
 describe("concurrencia entre dos staff", () => {
   it("dos generateTeams simultáneos dejan un solo set de equipos coherente", async () => {
     const { db, event, challenges } = await setup();

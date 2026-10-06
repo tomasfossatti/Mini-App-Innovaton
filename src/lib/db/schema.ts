@@ -162,6 +162,10 @@ export const participations = pgTable(
     assignmentSource: assignmentSourceEnum("assignment_source"),
     // true cuando el staff dio de alta a la persona (sin cuestionario).
     addedByStaff: boolean("added_by_staff").notNull().default(false),
+    // Código de recuperación de sesión que da el staff en el stand (un solo uso, vence, 5 intentos).
+    recoveryCodeHash: text("recovery_code_hash"),
+    recoveryCodeExpiresAt: timestamp("recovery_code_expires_at", { withTimezone: true }),
+    recoveryAttempts: smallint("recovery_attempts").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

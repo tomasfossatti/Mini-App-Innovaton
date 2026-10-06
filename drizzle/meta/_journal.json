@@ -15,6 +15,13 @@
       "when": 1791270801257,
       "tag": "0001_staff_login_lockout",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791308002773,
+      "tag": "0002_staff_recovery_code",
+      "breakpoints": true
     }
   ]
 }

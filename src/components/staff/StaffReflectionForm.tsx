@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { submitReflectionByStaffAction } from "@/actions/founder";
-import { REFLECTION_ACTIONS, type Capability, type ReflectionAction } from "@/lib/domain/constants";
-import { PRIMARY_CONTRIBUTION_OPTIONS, REFLECTION_ACTION_LABELS } from "@/lib/domain/copy";
+import { MODES, REFLECTION_ACTIONS, type Capability, type Mode, type ReflectionAction } from "@/lib/domain/constants";
+import { MODE_LABELS, MODE_SHORT, PRIMARY_CONTRIBUTION_OPTIONS, REFLECTION_ACTION_LABELS } from "@/lib/domain/copy";
 import { Button } from "@/components/ui/Button";
 import { Select, TextInput } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
@@ -40,10 +40,13 @@ export function StaffReflectionForm({
   eventId,
   participationId,
   name,
+  initialMode,
 }: {
   eventId: string;
   participationId: string;
   name: string;
+  /** Si es null (alta del staff sin cuestionario), se puede cargar el modo del cuestionario en papel. */
+  initialMode: Mode | null;
 }) {
   const [postClarity, setPostClarity] = useState<number | null>(null);
   const [actions, setActions] = useState<ReflectionAction[]>([]);
@@ -51,6 +54,7 @@ export function StaffReflectionForm({
   const [text, setText] = useState("");
   const [perceivedValue, setPerceivedValue] = useState<number | null>(null);
   const [usefulness, setUsefulness] = useState<number | null>(null);
+  const [paperMode, setPaperMode] = useState<Mode | "">("");
   const [done, setDone] = useState(false);
   const { run, pending, error } = useActionRunner();
 
@@ -59,6 +63,20 @@ export function StaffReflectionForm({
 
   return (
     <div className="space-y-3 rounded-2xl border border-line p-3">
+      {initialMode === null ? (
+        <Select
+          aria-label="Modo del cuestionario en papel (opcional)"
+          value={paperMode}
+          onChange={(e) => setPaperMode(e.target.value as Mode | "")}
+        >
+          <option value="">Modo del cuestionario en papel: sin cuestionario</option>
+          {MODES.map((m) => (
+            <option key={m} value={m}>
+              {MODE_SHORT[m]} · {MODE_LABELS[m]}
+            </option>
+          ))}
+        </Select>
+      ) : null}
       <MiniScale label="1. Claridad sobre cómo aportó (1 nada claro · 5 muy claro)" value={postClarity} onChange={setPostClarity} />
       <div>
         <p className="text-sm font-semibold">2. Qué hizo (marcá las que figuran en la hoja)</p>
@@ -112,7 +130,7 @@ export function StaffReflectionForm({
               primaryCapability: capability as Capability,
               perceivedValue: perceivedValue!,
               initialModeUsefulness: usefulness!,
-            }),
+            }, paperMode || null),
           );
           if (res?.ok) setDone(true);
         }}

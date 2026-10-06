@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCb) as (
@@ -16,6 +16,16 @@ export function generateToken(): string {
 /** SHA-256 hex. Solo se guarda el hash, nunca el token plano. */
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** Código de recuperación de 6 dígitos que el staff le dicta a la persona en el stand. */
+export function generateRecoveryCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+/** Hash del código atado a la participación: el mismo código no sirve para otra persona. */
+export function recoveryCodeHash(participationId: string, code: string): string {
+  return sha256(`${participationId}:${code}`);
 }
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };

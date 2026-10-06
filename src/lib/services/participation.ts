@@ -8,7 +8,7 @@ import {
   type EventRow,
   type ParticipationRow,
 } from "@/lib/db/schema";
-import { generateToken, sha256 } from "@/lib/auth/crypto";
+import { generateToken, recoveryCodeHash, sha256 } from "@/lib/auth/crypto";
 import {
   PHASES_OPEN_FOR_SELF_CHECKIN,
   PHASES_OPEN_FOR_START,
@@ -316,7 +316,8 @@ export interface RegisterResult {
  * - En fase CHECKIN (14:20–14:25, desde el stand) queda CHECKED_IN automáticamente (PRD §12).
  * - En MATCHING/SPRINT se inscribe como llegada tarde (REGISTERED) y el staff decide.
  * - Si ese WhatsApp ya tiene una inscripción en este evento, no se toca: puede ser otra persona
- *   usando un número ajeno. Quien cambió de celular recupera su lugar con "Recuperar mi lugar".
+ *   usando un número ajeno. Quien cambió de celular pide en el stand un código para recuperar
+ *   su lugar (recoverParticipation).
  */
 export async function registerParticipant(
   db: DbOrTx,
@@ -365,7 +366,7 @@ export async function registerParticipant(
       if (existing) {
         throw new DomainError(
           "ALREADY_REGISTERED",
-          "Ese WhatsApp ya tiene una inscripción en este Innovatón. Si sos vos, tocá «Recuperar mi lugar».",
+          "Ese WhatsApp ya tiene una inscripción en este Innovatón. Si sos vos, pedí en el stand un código para recuperar tu lugar.",
         );
       }
     }
@@ -424,34 +425,79 @@ export async function checkIn(
   return updated ?? (await reload(db, participation.id));
 }
 
+/** Intentos con un mismo código antes de invalidarlo: el staff genera uno nuevo. */
+export const RECOVERY_MAX_ATTEMPTS = 5;
+
 /**
- * Recupera la sesión desde otro dispositivo con el WhatsApp de la inscripción.
- * Genera un token nuevo (el dispositivo anterior deja de estar asociado).
+ * Recupera la sesión desde otro dispositivo con el WhatsApp de la inscripción y el código de un
+ * solo uso que da el staff en el stand (createRecoveryCode). El número solo no alcanza: así nadie
+ * abre la participación de otra persona por conocer su WhatsApp. Genera un token nuevo (el
+ * dispositivo anterior deja de estar asociado) y consume el código.
+ * Número desconocido, sin código, vencido, agotado o incorrecto dan el mismo error.
  */
 export async function recoverParticipation(
   db: DbOrTx,
   event: EventRow,
   whatsappInput: string,
+  codeInput: string,
+  now: Date = new Date(),
 ): Promise<{ token: string; participation: ParticipationRow }> {
   const phone = normalizeWhatsapp(whatsappInput, phoneCountry());
   if (!phone.ok) throw new DomainError("INVALID_WHATSAPP", phone.error);
-  const notFound = new DomainError(
-    "NOT_FOUND",
-    "No encontramos una inscripción con ese número. Revisalo o acercate al stand.",
+  const code = codeInput.replace(/\D/g, "");
+  if (code.length !== 6) throw new DomainError("INVALID_CODE", "El código tiene 6 números.");
+  const failed = new DomainError(
+    "RECOVERY_FAILED",
+    "Revisá tu WhatsApp y el código. Si no funciona, pedí uno nuevo en el stand.",
   );
   const person = await findParticipantByWhatsapp(db, phone.e164);
-  if (!person) throw notFound;
-  const existing = await db.query.participations.findFirst({
-    where: and(eq(participations.eventId, event.id), eq(participations.participantId, person.id)),
+  if (!person) throw failed;
+
+  // La transacción devuelve el resultado y el error se lanza afuera: así el intento fallido
+  // queda contado (un throw adentro desharía el UPDATE).
+  const result = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(participations)
+      .where(and(eq(participations.eventId, event.id), eq(participations.participantId, person.id)))
+      .for("update");
+    if (
+      !current ||
+      !isRegistered(current.status) ||
+      !current.recoveryCodeHash ||
+      !current.recoveryCodeExpiresAt ||
+      current.recoveryCodeExpiresAt.getTime() <= now.getTime() ||
+      current.recoveryAttempts >= RECOVERY_MAX_ATTEMPTS
+    ) {
+      return null;
+    }
+    if (current.recoveryCodeHash !== recoveryCodeHash(current.id, code)) {
+      const attempts = current.recoveryAttempts + 1;
+      await tx
+        .update(participations)
+        .set(
+          attempts >= RECOVERY_MAX_ATTEMPTS
+            ? { recoveryAttempts: attempts, recoveryCodeHash: null, recoveryCodeExpiresAt: null }
+            : { recoveryAttempts: attempts },
+        )
+        .where(eq(participations.id, current.id));
+      return null;
+    }
+    const token = generateToken();
+    const [updated] = await tx
+      .update(participations)
+      .set({
+        resumeTokenHash: sha256(token),
+        recoveryCodeHash: null,
+        recoveryCodeExpiresAt: null,
+        recoveryAttempts: 0,
+      })
+      .where(eq(participations.id, current.id))
+      .returning();
+    return { token, participation: updated };
   });
-  if (!existing || !isRegistered(existing.status)) throw notFound;
-  const token = generateToken();
-  const [updated] = await db
-    .update(participations)
-    .set({ resumeTokenHash: sha256(token) })
-    .where(eq(participations.id, existing.id))
-    .returning();
-  return { token, participation: updated };
+  if (!result) throw failed;
+  return result;
 }
 
 export interface ParticipantState {

@@ -17,12 +17,12 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - **Inscripción tardía.** En MATCHING o SPRINT se puede seguir inscribiendo, con un aviso: la persona queda REGISTERED y el staff decide si la suma como latecomer. Así no se pierde su hipótesis ni su WhatsApp. En PITCH, REFLECTION y CLOSED la inscripción está cerrada.
 - **Check-in desde el celular** solo en CHECKIN y MATCHING. Después de publicar, el check-in lo hace el staff (PRD §18: "después de 14:35, solo si el staff determina").
 - **Consentimiento operativo obligatorio, el de comunidad opcional.** Sin poder escribirle por WhatsApp no se puede operar el evento; las comunicaciones futuras son opcionales (PRD §11).
-- **WhatsApp ya inscripto en el evento.** Una segunda inscripción con ese número se rechaza y la pantalla ofrece «Recuperar mi lugar». Así nadie puede pisar el nombre, las elecciones o los consentimientos de otra persona usando su número. Quien cambió de celular recupera su inscripción tal como estaba, con el check-in incluido.
-- **Recuperación de sesión** por WhatsApp normalizado (identidad persistente, spec §5). Rota el token, así que el dispositivo anterior deja de estar asociado. Alcance real del riesgo aceptado para un evento de un día: con el número de otra persona se puede ver su mesa y su resultado final (punto de partida, lo que marcó en la reflexión, la interpretación y el próximo experimento) y, si la reflexión está abierta y ella todavía no la hizo, enviarla en su nombre una sola vez. No se ven nombre ni teléfono. No hay límite de intentos, pero adivinar a ciegas un número inscripto entre millones de combinaciones no es práctico en una hora. Si llegara a pasar, la persona real ve «Se perdió la sesión» y puede recuperarla otra vez con su número; una reflexión enviada por otra persona no se puede rehacer desde el panel.
+- **WhatsApp ya inscripto en el evento.** Una segunda inscripción con ese número se rechaza y la pantalla deriva a pedir en el stand un código para recuperar el lugar. Así nadie puede pisar el nombre, las elecciones o los consentimientos de otra persona usando su número. Quien cambió de celular recupera su inscripción tal como estaba, con el check-in incluido.
+- **Recuperación de sesión con código del staff.** La identidad sigue siendo el WhatsApp normalizado (spec §5), pero el número solo ya no abre una inscripción. Hace falta además un código de 6 dígitos que el staff genera desde la fila de la persona en el Panel y le dicta cara a cara. El código se guarda hasheado y atado a la participación, vence a los 15 minutos, es de un solo uso y se invalida tras 5 intentos fallidos; cada intento queda contado aunque falle. Número desconocido, código vencido, agotado o incorrecto dan el mismo mensaje. Al recuperar se rota el token, así que el dispositivo anterior deja de estar asociado. Es un desvío de spec §5, que recuperaba solo con el WhatsApp: así, conocer el número de otra persona alcanzaba para ver su mesa y su resultado o enviar su reflexión. Las cuentas STAFF también generan códigos, porque la recepción es la que atiende a quien perdió la sesión.
 - **Polling del participante** (02 §11): cada 6 s mientras espera equipo, como pide la spec. Además consulta cada 15–20 s mientras espera que abra el check-in o la reflexión, para que el botón aparezca sin recargar, y se detiene cuando ya no hay nada que esperar. El JSON de `/api/participant/state` usa `team.startupName`, `team.teamNumber` y `team.tableNumber`.
 - **Pasar a sprint, pitch o reflexión exige equipos publicados**: sin eso nadie ve su mesa ni puede reflexionar. Cerrar el evento sí se permite sin equipos.
 - **Al abrir la reflexión**, quienes estaban MATCHED pasan a EXPERIENCE_COMPLETED. Al publicar, quienes estaban REGISTERED (nunca hicieron check-in) pasan a NO_SHOW. El staff igual puede hacerles check-in después.
-- **Alta rápida por staff** para quien no tiene celular o para cargar planillas en papel: crea a la persona como presente, sin cuestionario (`initial_mode` nulo).
+- **Alta rápida por staff** para quien no tiene celular o para cargar planillas en papel: crea a la persona como presente. Si hizo el cuestionario en papel, el staff carga su modo E/C/I, que es la hipótesis inicial y nunca evidencia; sin cuestionario queda `initial_mode` nulo. El modo en papel solo completa uno vacío: nunca pisa el del celular.
 
 ## Matching
 
@@ -39,6 +39,7 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - Cambiar la mesa de un equipo por una ocupada avisa y pide confirmación antes de intercambiarlas.
 - Después del sprint no se puede dejar a alguien sin equipo (desaparecería del tablero y no podría reflexionar). Si se lo mueve a otro equipo y ya había reflexionado, su interpretación se recalcula con la evidencia del equipo nuevo.
 - Después de publicar, el botón de regenerar desaparece y el servidor rechaza el pedido.
+- **Muy poca gente.** Aunque el matching no forme ningún equipo, mientras haya presentes sin equipo en MATCHING el ADMIN ve **+ Equipo vacío** en cada desafío. Así arma a mano equipos de 1 o 2 personas para ensayos o asistencia muy baja y los publica; el tablero avisa que son chicos. El matching automático los sigue marcando como casos sin resolver.
 
 ## Educai
 
@@ -51,7 +52,7 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 - **Recomendación:** DIVERGENT → investigar la divergencia; dos capacidades convergentes → explorar una complementaria (mapa fijo); una convergente → replicar; una señal → juntar más evidencia; sin evidencia → experimento según el modo inicial. Nunca se recomienda "mejorar la más baja".
 - **Reinterpretación:** si la evaluación u observación del founder llega después de la reflexión, se crea un snapshot nuevo (versionado) y el resultado del participante muestra el último.
 - **Pregunta 3 de la reflexión:** el texto es opcional; la categoría es obligatoria. La evidencia sale de la categoría elegida por la persona y el texto se guarda como `raw_text`.
-- **Reflexión en papel:** desde la vista de equipo, el staff carga la reflexión de quien la hizo en papel o no tiene celular (alta rápida). Pasa por el mismo servicio que la del participante: misma evidencia, interpretación e idempotencia.
+- **Reflexión en papel:** desde la vista de equipo, el staff carga la reflexión de quien la hizo en papel o no tiene celular (alta rápida). Pasa por el mismo servicio que la del participante: misma evidencia, interpretación e idempotencia. Si la persona no tenía modo inicial, el staff puede cargar el del cuestionario en papel; se guarda antes de interpretar y no crea evidencia. Ese campo va aparte del formulario del participante, que no puede fijar su propio modo.
 
 ## Roles y datos personales
 
@@ -59,6 +60,7 @@ Este documento registra cómo se resolvieron ambigüedades y adaptaciones al con
 |---|---|---|
 | Panel con contadores y lista de inscriptos | sí, con teléfonos enmascarados (`•••• 4567`) | sí, con WhatsApp completo y link al recordatorio |
 | Check-in manual, deshacer, alta rápida | sí | sí |
+| Código para recuperar una sesión | sí | sí |
 | Sumar latecomers con la sugerencia del tablero | sí (nunca mueve a quien ya tiene equipo) | sí |
 | A3, evaluación, contribución individual, reflexión en papel | sí | sí |
 | Kit en papel (sin datos personales) | sí | sí |

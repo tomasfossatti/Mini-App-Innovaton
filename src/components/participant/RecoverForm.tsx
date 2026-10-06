@@ -11,11 +11,12 @@ import { useActionRunner } from "@/components/ui/useActionRunner";
 export function RecoverForm({ eventSlug }: { eventSlug: string }) {
   const router = useRouter();
   const [whatsapp, setWhatsapp] = useState("");
+  const [code, setCode] = useState("");
   const { run, pending, error, needsReload } = useActionRunner();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const res = await run(() => recoverAction(eventSlug, whatsapp));
+    const res = await run(() => recoverAction(eventSlug, whatsapp, code));
     if (res?.ok) router.push(res.data.next);
   }
 
@@ -30,6 +31,18 @@ export function RecoverForm({ eventSlug }: { eventSlug: string }) {
           required
           value={whatsapp}
           onChange={(e) => setWhatsapp(e.target.value)}
+        />
+      </Field>
+      <Field label="Código que te dieron en el stand" htmlFor="rec-code">
+        <TextInput
+          id="rec-code"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={12}
+          required
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
         />
       </Field>
       <ActionError error={error} needsReload={needsReload} />

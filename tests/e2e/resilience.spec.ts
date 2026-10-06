@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import * as s from "../../src/lib/db/schema";
 import { e2eDb } from "./db";
 import { acceptDialogs, chooseChallenges, newMobile, staffLogin, trackErrors } from "./helpers";
@@ -128,25 +128,166 @@ test("internet lento: los botones muestran estado y el flujo termina sin duplica
   expect(people).toHaveLength(1);
 });
 
-test("sesión perdida: recupera el lugar con el WhatsApp desde otro celular", async ({ browser }) => {
+test("sesión perdida: el WhatsApp solo no alcanza; con el código del staff recupera el lugar", async ({ browser }) => {
+  const event = await db.query.events.findFirst({ where: eq(s.events.slug, SLUG) });
+
+  async function tryRecover(whatsapp: string, code: string) {
+    const { page } = await newMobile(browser);
+    await page.goto(`/e/${SLUG}/recover`);
+    await page.getByLabel("El WhatsApp con el que te inscribiste").fill(whatsapp);
+    await page.getByLabel("Código que te dieron en el stand").fill(code);
+    await page.getByRole("button", { name: "RECUPERAR MI LUGAR" }).click();
+    return page;
+  }
+
+  // Conocer el número de otra persona no abre su inscripción.
+  const intruder = await tryRecover("+54 9 351 200-0001", "123456");
+  await expect(intruder.getByText(/Revisá tu WhatsApp y el código/)).toBeVisible();
+  await expect(intruder).toHaveURL(/\/recover$/);
+
+  // En el stand, el staff genera el código desde la fila de la persona.
+  const staff = await newMobile(browser);
+  await staffLogin(staff.page);
+  await staff.page.goto(`/staff/events/${event!.id}`);
+  const row = staff.page.getByRole("listitem").filter({ hasText: "Doble Tap" });
+  await row.getByRole("button", { name: "Código para recuperar" }).click();
+  const issued = row.getByRole("status");
+  await expect(issued).toContainText(/Código\s*\d{6}/);
+  const code = (await issued.textContent())!.match(/Código\s*(\d{6})/)![1];
+
   const { page } = await newMobile(browser);
   await page.goto(`/e/${SLUG}`);
   await page.getByRole("link", { name: "¿Ya te inscribiste? Recuperá tu lugar" }).click();
   await page.getByLabel("El WhatsApp con el que te inscribiste").fill("+54 9 351 200-0001");
+  await page.getByLabel("Código que te dieron en el stand").fill(code);
   await page.getByRole("button", { name: "RECUPERAR MI LUGAR" }).click();
   await page.waitForURL(/\/status$/);
   await expect(page.getByRole("heading", { name: "Estás preinscripto." })).toBeVisible();
 
-  const other = await newMobile(browser);
-  await other.page.goto(`/e/${SLUG}/recover`);
-  await other.page.getByLabel("El WhatsApp con el que te inscribiste").fill("351 999 9999");
-  await other.page.getByRole("button", { name: "RECUPERAR MI LUGAR" }).click();
-  await expect(other.page.getByText(/No encontramos una inscripción/)).toBeVisible();
+  // El código es de un solo uso, y un número que no está inscripto da el mismo mensaje.
+  const reuse = await tryRecover("351 200 0001", code);
+  await expect(reuse.getByText(/Revisá tu WhatsApp y el código/)).toBeVisible();
+  const unknown = await tryRecover("351 999 9999", code);
+  await expect(unknown.getByText(/Revisá tu WhatsApp y el código/)).toBeVisible();
 
   // Sin cookie, las pantallas internas vuelven al inicio en lugar de romperse.
   const fresh = await newMobile(browser);
   await fresh.page.goto(`/e/${SLUG}/status`);
   await expect(fresh.page).toHaveURL(new RegExp(`/e/${SLUG}$`));
+});
+
+/** Personas presentes cargadas directo en la base (como si hubieran hecho check-in). */
+async function addPresent(
+  eventId: string,
+  people: { name: string; phone: string; firstChoiceId: string; secondChoiceId?: string | null; mode?: s.ParticipationRow["initialMode"] }[],
+) {
+  const out: s.ParticipationRow[] = [];
+  for (const [i, p] of people.entries()) {
+    const [person] = await db.insert(s.participants).values({ name: p.name, whatsappNormalized: p.phone }).returning();
+    const [row] = await db
+      .insert(s.participations)
+      .values({
+        eventId,
+        participantId: person.id,
+        resumeTokenHash: `hash-${p.phone}`,
+        status: "CHECKED_IN",
+        initialMode: p.mode === undefined ? "EXPLORE" : p.mode,
+        firstChoiceId: p.firstChoiceId,
+        secondChoiceId: p.secondChoiceId ?? null,
+        secondChoiceAny: !p.secondChoiceId,
+        operationalConsentAt: new Date(),
+        registeredAt: new Date(),
+        checkedInAt: new Date(Date.now() - (10 - i) * 1000),
+      })
+      .returning();
+    out.push(row);
+  }
+  return out;
+}
+
+test("con muy poca gente el staff arma un equipo a mano aunque sean 2 y lo publica", async ({ browser }) => {
+  const { event, challenges } = await createEvent("e2e-pocos", "MATCHING");
+  const people = await addPresent(event.id, [
+    { name: "Poca Gente Uno", phone: "+5493513100001", firstChoiceId: challenges[0].id, secondChoiceId: challenges[1].id },
+    { name: "Poca Gente Dos", phone: "+5493513100002", firstChoiceId: challenges[2].id, secondChoiceId: challenges[1].id },
+  ]);
+  const { page } = await newMobile(browser);
+  acceptDialogs(page);
+  await staffLogin(page);
+  await page.goto(`/staff/events/${event.id}/teams`);
+
+  // El matching no puede formar equipos de 3: quedan como casos manuales.
+  await page.getByRole("button", { name: /Generar equipos/ }).click();
+  await expect(page.getByText("0 equipos · 0 personas asignadas")).toBeVisible();
+  await expect(page.getByText("Presentes sin equipo (2)")).toBeVisible();
+
+  await page.getByRole("button", { name: "+ Equipo vacío" }).first().click();
+  for (const name of ["Poca Gente Uno", "Poca Gente Dos"]) {
+    const select = page.getByLabel(`Asignar a ${name} manualmente`);
+    await expect(select.locator("option")).toHaveCount(2);
+    await select.selectOption({ index: 1 });
+    await expect(page.getByLabel(`Asignar a ${name} manualmente`)).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "Publicar equipos" }).click();
+  await expect(page.getByText("Equipos publicados")).toBeVisible();
+
+  const rows = await db
+    .select()
+    .from(s.participations)
+    .where(inArray(s.participations.id, people.map((p) => p.id)));
+  expect(rows.map((r) => r.status)).toEqual(["MATCHED", "MATCHED"]);
+  expect(new Set(rows.map((r) => r.teamId)).size).toBe(1);
+});
+
+test("carga en papel: el alta rápida y la reflexión guardan el modo del cuestionario en papel", async ({ browser }) => {
+  const { event, challenges } = await createEvent("e2e-papel", "REFLECTION");
+  const [team] = await db
+    .insert(s.teams)
+    .values({ eventId: event.id, challengeId: challenges[0].id, teamNumber: 1, tableNumber: 1, publishedAt: new Date() })
+    .returning();
+  const [paper] = await addPresent(event.id, [
+    { name: "Papel Uno", phone: "+5493513200001", firstChoiceId: challenges[0].id, mode: null },
+  ]);
+  await db
+    .update(s.participations)
+    .set({ teamId: team.id, assignmentSource: "MANUAL", status: "EXPERIENCE_COMPLETED", addedByStaff: true })
+    .where(eq(s.participations.id, paper.id));
+
+  const { page } = await newMobile(browser);
+  acceptDialogs(page);
+  await staffLogin(page);
+
+  // Reflexión en papel de alguien dado de alta sin cuestionario.
+  await page.goto(`/staff/events/${event.id}/teams/${team.id}`);
+  await page.getByText("Cargar la reflexión de Papel Uno").click();
+  const form = page.locator("details[open]");
+  await form.getByLabel("Modo del cuestionario en papel (opcional)").selectOption({ label: "E · Explorar" });
+  await form.getByRole("radiogroup", { name: /1\. Claridad/ }).getByRole("radio", { name: "4" }).click();
+  await form.getByText("Propuse alternativas").click();
+  await form.getByLabel("3. Aporte más importante").selectOption({ label: "Generar alternativas" });
+  await form.getByRole("radiogroup", { name: /4\. ¿Su aporte/ }).getByRole("radio", { name: "5" }).click();
+  await form.getByRole("radiogroup", { name: /5\. ¿La sugerencia/ }).getByRole("radio", { name: "3" }).click();
+  await form.getByRole("button", { name: "Guardar reflexión de Papel Uno" }).click();
+  await expect(page.getByText("Cargar la reflexión de Papel Uno")).toHaveCount(0);
+  await expect
+    .poll(async () => (await db.query.participations.findFirst({ where: eq(s.participations.id, paper.id) }))?.status)
+    .toBe("INTERPRETED");
+  expect((await db.query.participations.findFirst({ where: eq(s.participations.id, paper.id) }))?.initialMode).toBe(
+    "EXPLORE",
+  );
+
+  // Alta rápida desde la planilla en papel, con el modo del cuestionario.
+  await page.goto(`/staff/events/${event.id}`);
+  await page.getByText("Alta rápida (sin celular o desde planilla)").click();
+  await page.getByLabel("Nombre", { exact: true }).fill("Papel Dos");
+  await page.getByLabel("WhatsApp", { exact: true }).fill("351 320 0002");
+  await page.getByLabel("Desafío 1").selectOption({ label: challenges[1].startupName });
+  await page.getByLabel("Modo del cuestionario en papel (opcional)").selectOption({ label: "C · Crear" });
+  await page.getByRole("button", { name: "Agregar como presente" }).click();
+  await expect(page.getByText("Papel Dos quedó presente.")).toBeVisible();
+  const person = await db.query.participants.findFirst({ where: eq(s.participants.whatsappNormalized, "+5493513200002") });
+  const added = await db.query.participations.findFirst({ where: eq(s.participations.participantId, person!.id) });
+  expect(added).toMatchObject({ initialMode: "CREATE", addedByStaff: true, status: "CHECKED_IN" });
 });
 
 test("dos staff generan equipos al mismo tiempo: un único set coherente", async ({ browser }) => {

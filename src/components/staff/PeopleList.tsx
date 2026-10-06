@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { manualCheckInAction, undoCheckInAction } from "@/actions/staff";
+import { createRecoveryCodeAction, manualCheckInAction, undoCheckInAction } from "@/actions/staff";
 import type { DashboardPerson } from "@/lib/services/operations";
 import { MODE_SHORT } from "@/lib/domain/copy";
 import { phoneMatches } from "@/lib/domain/search";
@@ -23,6 +23,41 @@ const FILTERS: { key: Filter; label: string }[] = [
 
 function normalize(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/**
+ * Código de un solo uso para que la persona recupere su lugar en otro celular. El staff lo dicta
+ * cara a cara: el WhatsApp solo no alcanza para abrir una inscripción.
+ */
+function RecoveryCode({ eventId, person }: { eventId: string; person: DashboardPerson }) {
+  const { run, pending, error } = useActionRunner();
+  const [issued, setIssued] = useState<{ code: string; expiresAtLabel: string } | null>(null);
+
+  async function generate() {
+    const res = await run(() => createRecoveryCodeAction(eventId, person.participationId));
+    if (res?.ok) setIssued(res.data);
+  }
+
+  return (
+    <div className="w-full space-y-1">
+      {issued ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm" role="status">
+          <span>
+            Código <span className="font-mono text-lg font-bold tracking-widest">{issued.code}</span> · vence{" "}
+            {issued.expiresAtLabel}. Dáselo solo a {person.name}.
+          </span>
+          <Button size="sm" variant="ghost" pending={pending} onClick={() => void generate()}>
+            Otro código
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" variant="ghost" pending={pending} onClick={() => void generate()}>
+          Código para recuperar
+        </Button>
+      )}
+      {error ? <p className="text-sm font-medium text-danger">{error}</p> : null}
+    </div>
+  );
 }
 
 function matches(p: DashboardPerson, filter: Filter, recent?: Set<string>): boolean {
@@ -105,6 +140,7 @@ function PersonRow({
           Deshacer
         </Button>
       ) : null}
+      <RecoveryCode eventId={eventId} person={person} />
     </li>
   );
 }

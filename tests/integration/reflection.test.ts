@@ -433,6 +433,47 @@ describe("submitReflection", () => {
   });
 });
 
+describe("reflexión en papel con el modo del cuestionario en papel", () => {
+  async function latestSnapshot(participationId: string) {
+    const rows = await db
+      .select()
+      .from(s.interpretationSnapshots)
+      .where(eq(s.interpretationSnapshots.participationId, participationId));
+    return rows.at(-1)!;
+  }
+
+  it("completa un modo vacío antes de interpretar, sin sumar evidencia ni pisar un modo existente", async () => {
+    const { event, challenge, team } = await setup();
+    const sinModo = await member(event.id, challenge.id, team.id, { mode: null });
+    const enPapel = await member(event.id, challenge.id, team.id, { mode: null });
+    const delCelular = await member(event.id, challenge.id, team.id, { mode: "EXPLORE" });
+    const conModo = await member(event.id, challenge.id, team.id, { mode: "DRIVE" });
+
+    await submitReflection(db, event, sinModo.id, input(), NOW);
+    await submitReflection(db, event, enPapel.id, input(), NOW, { initialMode: "EXPLORE" });
+    await submitReflection(db, event, delCelular.id, input(), NOW);
+    await submitReflection(db, event, conModo.id, input(), NOW, { initialMode: "EXPLORE" });
+
+    const reload = (id: string) => db.query.participations.findFirst({ where: eq(s.participations.id, id) });
+    expect((await reload(enPapel.id))?.initialMode).toBe("EXPLORE");
+    expect((await reload(conModo.id))?.initialMode).toBe("DRIVE");
+    expect((await reload(sinModo.id))?.initialMode).toBeNull();
+
+    // La hipótesis no es evidencia: mismas filas que sin modo.
+    expect(await countRows(enPapel.id)).toEqual(await countRows(sinModo.id));
+    // Se interpreta igual que quien hizo el cuestionario en el celular con ese modo.
+    const paper = await latestSnapshot(enPapel.id);
+    const phone = await latestSnapshot(delCelular.id);
+    expect(paper.type).toBe(phone.type);
+    expect(paper.summary).toBe(phone.summary);
+
+    // Si la reflexión ya existía, el modo no se toca.
+    const again = await submitReflection(db, event, sinModo.id, input(), NOW, { initialMode: "CREATE" });
+    expect(again.alreadySubmitted).toBe(true);
+    expect((await reload(sinModo.id))?.initialMode).toBeNull();
+  });
+});
+
 describe("el cuestionario no es evidencia", () => {
   it("quien completó el cuestionario y se inscribió, sin hacer nada más, tiene 0 evidence_items", async () => {
     const event = await makeEvent(db, { phase: "REGISTRATION" });

@@ -29,7 +29,7 @@ import {
 import { runAction, type ActionResult } from "./result";
 
 const SESSION_LOST =
-  "No encontramos tu sesión en este navegador. Empezá de nuevo o recuperá tu lugar con tu WhatsApp.";
+  "No encontramos tu sesión en este navegador. Empezá de nuevo o pedí en el stand un código para recuperar tu lugar.";
 
 async function loadEvent(eventSlug: string) {
   if (!/^[a-z0-9-]{1,80}$/.test(eventSlug)) {
@@ -188,11 +188,13 @@ export async function checkInAction(eventSlug: string): Promise<ActionResult<Par
 export async function recoverAction(
   eventSlug: string,
   whatsapp: string,
+  code: string,
 ): Promise<ActionResult<{ next: string }>> {
   return runAction(async () => {
     const value = z.string().max(40).parse(whatsapp);
+    const recoveryCode = z.string().max(12).parse(code);
     const event = await loadEvent(eventSlug);
-    const { token, participation } = await recoverParticipation(getDb(), event, value);
+    const { token, participation } = await recoverParticipation(getDb(), event, value, recoveryCode);
     await setParticipantToken(eventSlug, token);
     return { next: stepPath(eventSlug, nextStep(participation)) };
   });

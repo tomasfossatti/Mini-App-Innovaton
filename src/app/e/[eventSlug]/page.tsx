@@ -49,7 +49,7 @@ export default async function LandingPage(props: PageProps<"/e/[eventSlug]">) {
           <Notice tone="info" title={event.phase === "DRAFT" ? "Todavía no abrió la inscripción" : "La inscripción cerró"}>
             {event.phase === "DRAFT"
               ? `Volvé a partir de las ${formatTime(event.registrationOpensAt, tz)}.`
-              : "Si te inscribiste, recuperá tu lugar con tu WhatsApp."}
+              : "Si te inscribiste, pedí en el stand un código para recuperar tu lugar."}
           </Notice>
         )}
 

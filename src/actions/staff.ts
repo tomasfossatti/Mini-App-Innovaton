@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
 import { requireStaffAction } from "@/lib/auth/staff";
-import { EVENT_PHASES, type StaffRole } from "@/lib/domain/constants";
+import { EVENT_PHASES, MODES, type StaffRole } from "@/lib/domain/constants";
+import { formatTime } from "@/lib/domain/time";
 import { requireEvent, setEventPhase } from "@/lib/services/events";
-import { manualCheckIn, staffQuickAdd, undoCheckIn } from "@/lib/services/operations";
+import { createRecoveryCode, manualCheckIn, staffQuickAdd, undoCheckIn } from "@/lib/services/operations";
 import {
   assignLatecomer,
   createTeam,
@@ -52,6 +53,20 @@ export async function manualCheckInAction(eventId: string, participationId: stri
   return staffOp(eventId, () => manualCheckIn(getDb(), eventId, id.parse(participationId)), "STAFF");
 }
 
+/** Código para que la persona recupere su sesión en otro celular. Se dicta cara a cara en el stand. */
+export async function createRecoveryCodeAction(eventId: string, participationId: string) {
+  return staffOp(
+    eventId,
+    async () => {
+      const db = getDb();
+      const event = await requireEvent(db, eventId);
+      const { code, expiresAt } = await createRecoveryCode(db, eventId, id.parse(participationId));
+      return { code, expiresAtLabel: formatTime(expiresAt, event.timezone) };
+    },
+    "STAFF",
+  );
+}
+
 export async function undoCheckInAction(eventId: string, participationId: string) {
   return staffOp(
     eventId,
@@ -69,6 +84,7 @@ const QuickAddSchema = z.object({
   firstChoiceId: z.uuid("Elegí la primera opción."),
   secondChoiceId: z.uuid().nullable(),
   secondChoiceAny: z.boolean(),
+  initialMode: z.enum(MODES).nullable().optional(),
 });
 
 export async function quickAddAction(

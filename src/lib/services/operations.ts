@@ -21,7 +21,8 @@ import {
 } from "@/lib/domain/constants";
 import { normalizeWhatsapp } from "@/lib/domain/phone";
 import { formatTime } from "@/lib/domain/time";
-import { generateToken, sha256 } from "@/lib/auth/crypto";
+import { generateRecoveryCode, generateToken, recoveryCodeHash, sha256 } from "@/lib/auth/crypto";
+import { hasCompletedReflection, isRegistered } from "@/lib/domain/flow";
 import { namesLikelyMatch } from "@/lib/domain/text";
 import { DomainError } from "./errors";
 import { hasPublishedTeams, isUuid, listChallenges, lockEvent, requireEvent } from "./events";
@@ -475,12 +476,51 @@ export async function undoCheckIn(
   });
 }
 
+const RECOVERY_CODE_MINUTES = 15;
+
+/**
+ * Código de un solo uso para que una persona inscripta recupere su sesión en otro celular
+ * (recoverParticipation). Lo genera el staff en el stand, cara a cara con la persona. Reemplaza
+ * el código anterior, vence a los 15 minutos y se invalida tras 5 intentos fallidos.
+ */
+export async function createRecoveryCode(
+  db: DbOrTx,
+  eventId: string,
+  participationId: string,
+  now: Date = new Date(),
+): Promise<{ code: string; expiresAt: Date }> {
+  if (!isUuid(eventId) || !isUuid(participationId)) {
+    throw new DomainError("NOT_FOUND", NOT_FOUND_MESSAGE);
+  }
+  const current = await db.query.participations.findFirst({
+    where: and(eq(participations.id, participationId), eq(participations.eventId, eventId)),
+    columns: { id: true, status: true },
+  });
+  if (!current) throw new DomainError("NOT_FOUND", NOT_FOUND_MESSAGE);
+  if (!isRegistered(current.status)) {
+    throw new DomainError("NOT_REGISTERED", "Esta persona no terminó la inscripción.");
+  }
+  const code = generateRecoveryCode();
+  const expiresAt = new Date(now.getTime() + RECOVERY_CODE_MINUTES * 60_000);
+  await db
+    .update(participations)
+    .set({
+      recoveryCodeHash: recoveryCodeHash(current.id, code),
+      recoveryCodeExpiresAt: expiresAt,
+      recoveryAttempts: 0,
+    })
+    .where(eq(participations.id, current.id));
+  return { code, expiresAt };
+}
+
 export interface StaffQuickAddInput {
   name: string;
   whatsapp: string;
   firstChoiceId: string;
   secondChoiceId: string | null;
   secondChoiceAny: boolean;
+  /** Modo del cuestionario hecho en papel (hipótesis inicial). Nunca crea evidencia. */
+  initialMode?: Mode | null;
 }
 
 const UNAVAILABLE_CHALLENGE = "Ese desafío ya no está disponible. Elegí otro.";
@@ -531,7 +571,8 @@ const MARK_PRESENT_FROM: readonly ParticipationStatus[] = [
 /**
  * Alta rápida del staff para quien llega sin celular o para cargar planillas en papel.
  * La persona queda presente. Si ya existe (mismo WhatsApp normalizado) reutiliza su
- * participation en lugar de duplicarla.
+ * participation en lugar de duplicarla. El modo del cuestionario en papel solo completa uno
+ * que falte: nunca pisa el del celular ni cambia a quien ya reflexionó.
  */
 export async function staffQuickAdd(
   db: DbOrTx,
@@ -572,10 +613,15 @@ export async function staffQuickAdd(
     if (existing) {
       // Si se inscribió sola/o, sus elecciones no se tocan: solo se la marca presente.
       const canUpdateChoices = existing.teamId === null && existing.addedByStaff;
+      const canSetMode =
+        Boolean(input.initialMode) &&
+        existing.initialMode === null &&
+        !hasCompletedReflection(existing.status);
       await tx
         .update(participations)
         .set({
           ...(canUpdateChoices ? choices : {}),
+          ...(canSetMode ? { initialMode: input.initialMode } : {}),
           status: MARK_PRESENT_FROM.includes(existing.status) ? "CHECKED_IN" : existing.status,
           registeredAt: existing.registeredAt ?? now,
           operationalConsentAt: existing.operationalConsentAt ?? now,
@@ -596,7 +642,7 @@ export async function staffQuickAdd(
         checkedInAt: now,
         registeredAt: now,
         operationalConsentAt: now,
-        initialMode: null,
+        initialMode: input.initialMode ?? null,
         ...choices,
       })
       .returning({ id: participations.id });

@@ -46,6 +46,9 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
     (c) => (!filter || c.id === filter) && (c.active || board.teams.some((t) => t.challengeId === c.id)),
   );
   const base = `/staff/events/${event.id}/teams`;
+  // Con muy poca gente el matching puede no formar ningún equipo: el ADMIN igual puede crear uno
+  // a mano (+ Equipo vacío) y asignar a quienes están presentes, aunque sean 1 o 2.
+  const buildByHand = isAdmin && board.phase === "MATCHING" && board.unassigned.length > 0;
 
   return (
     <div className="space-y-5">
@@ -86,7 +89,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
           <p className="text-sm text-muted">
             {board.published
               ? "Sugerencia según las reglas: equipo de 3 de su desafío, después 5º excepcional, después segunda opción, después equipo nuevo si hay 3 compatibles. Nunca se mueve a quienes ya están en un equipo."
-              : "Quedaron sin equipo en el matching. Asignalos a mano o creá un equipo."}
+              : "Quedaron sin equipo en el matching. Asignalos a mano o creá un equipo con «+ Equipo vacío» en su desafío, aunque sean 1 o 2."}
           </p>
           <LatecomerPanel
             canMove={isAdmin}
@@ -131,7 +134,7 @@ export default async function TeamsPage(props: PageProps<"/staff/events/[eventId
 
       {visibleChallenges.map((c) => {
         const teams = board.teams.filter((t) => t.challengeId === c.id);
-        if (teams.length === 0 && board.teams.length === 0) return null;
+        if (teams.length === 0 && board.teams.length === 0 && !buildByHand) return null;
         return (
           <section key={c.id} className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

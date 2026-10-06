@@ -258,7 +258,13 @@ export async function exportBackupJson(
       }),
       tx.query.participations.findMany({
         where: eq(participations.eventId, eventId),
-        columns: { resumeTokenHash: false },
+        // Credenciales de sesión y recuperación: nunca salen en el backup.
+        columns: {
+          resumeTokenHash: false,
+          recoveryCodeHash: false,
+          recoveryCodeExpiresAt: false,
+          recoveryAttempts: false,
+        },
         orderBy: asc(participations.createdAt),
       }),
       tx.query.questionnaireAnswers.findMany({
