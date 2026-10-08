@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/lib/db/client";
 import {
   challenges,
@@ -221,36 +221,36 @@ export async function updateChallenge(
 }
 
 /**
- * Borra un desafío solo si nadie lo eligió ni tiene equipos. Si no, conviene desactivarlo.
+ * Conserva las inscripciones: las FK ON DELETE SET NULL vacían solo las preferencias
+ * que apuntaban al desafío. Con equipos asociados se debe desactivar, no borrar.
  */
 export async function deleteChallenge(
   db: DbOrTx,
   eventId: string,
   challengeId: string,
 ): Promise<void> {
-  const used = await db.query.participations.findFirst({
-    where: and(
-      eq(participations.eventId, eventId),
-      or(
-        eq(participations.firstChoiceId, challengeId),
-        eq(participations.secondChoiceId, challengeId),
-      ),
-    ),
-    columns: { id: true },
+  await db.transaction(async (tx) => {
+    // Serializa el borrado con la generación y creación manual de equipos.
+    await lockEvent(tx, eventId);
+    const target = and(eq(challenges.id, challengeId), eq(challenges.eventId, eventId));
+    const challenge = await tx.query.challenges.findFirst({
+      where: target,
+      columns: { id: true },
+    });
+    if (!challenge) return;
+
+    const withTeams = await tx.query.teams.findFirst({
+      where: eq(teams.challengeId, challengeId),
+      columns: { id: true },
+    });
+    if (withTeams) {
+      throw new DomainError(
+        "CHALLENGE_IN_USE",
+        "Hay equipos asociados a este desafío. Desactivalo en lugar de borrarlo para conservar los equipos y sus evaluaciones.",
+      );
+    }
+    await tx.delete(challenges).where(target);
   });
-  const withTeams = await db.query.teams.findFirst({
-    where: eq(teams.challengeId, challengeId),
-    columns: { id: true },
-  });
-  if (used || withTeams) {
-    throw new DomainError(
-      "CHALLENGE_IN_USE",
-      "Hay personas o equipos asociados a este desafío. Desactivalo en lugar de borrarlo.",
-    );
-  }
-  await db
-    .delete(challenges)
-    .where(and(eq(challenges.id, challengeId), eq(challenges.eventId, eventId)));
 }
 
 export async function getChallengesByIds(

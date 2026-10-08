@@ -99,7 +99,7 @@ Principios que el código respeta y los tests verifican:
 
 ### Cargar desafíos
 
-En el evento, pestaña **Configuración** (solo ADMIN): cada desafío lleva startup, descripción breve, desafío (formato "¿Cómo podríamos…?"), brief completo, premio opcional, orden y activo. Para pasar de DEMO a real, desactivar o borrar los desafíos `DEMO ·` y cargar los briefs validados según [04-startup-briefs.md](docs/innovaton/04-startup-briefs.md). No hace falta tocar código. Un desafío que alguien ya eligió no se puede borrar, solo desactivar.
+En el evento, pestaña **Configuración** (solo ADMIN): cada desafío lleva startup, descripción breve, desafío (formato "¿Cómo podríamos…?"), brief completo, premio opcional, orden y activo. Para pasar de DEMO a real, desactivar o borrar los desafíos `DEMO ·` y cargar los briefs validados según [04-startup-briefs.md](docs/innovaton/04-startup-briefs.md). No hace falta tocar código. Se puede borrar un desafío aunque tenga personas inscriptas: se conservan todas las inscripciones y solo quedan vacías las preferencias que apuntaban a ese desafío. Si tiene equipos asociados, solo se puede desactivar, para conservar los equipos y sus evaluaciones.
 
 ### Dashboard y día del evento
 
