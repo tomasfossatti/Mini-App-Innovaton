@@ -13,7 +13,7 @@ export function DeleteChallengeButton({ eventId, challengeId }: { eventId: strin
         size="sm"
         pending={pending}
         onClick={() => {
-          if (confirm("¿Borrar este desafío? Solo es posible si nadie lo eligió.")) {
+          if (confirm("¿Borrar este desafío? Se conservarán todas las inscripciones y quedarán vacías las preferencias que lo eligieron. Si tiene equipos asociados, no se podrá borrar.")) {
             void run(() => deleteChallengeAction(eventId, challengeId));
           }
         }}
