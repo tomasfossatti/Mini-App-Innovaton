@@ -4,6 +4,8 @@ Web mobile-first que opera el Innovatón de punta a punta. El participante descu
 
 **Deployment:** https://mini-app-innovaton.vercel.app (staff en `/staff/login`).
 
+<p align="center"><img src="docs/img/participante.png" alt="Pantalla de inicio del participante" width="320"></p>
+
 ## Documentación
 
 - [00 — Visión y principios](docs/innovaton/00-vision.md)
@@ -164,3 +166,7 @@ Supabase funciona igual: alcanza con usar su connection string con pooler como `
 ## Fuera del MVP
 
 PWA, push, chatbot, matching con IA o ML, análisis automático del A3, reconocimiento del pitch, WhatsApp automático, portfolio Educai, recomendador profesional, rankings, networking automático y gamificación quedaron fuera a propósito (01 §30, 06).
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Tomás Fossatti
